@@ -28,6 +28,7 @@ dependencies:
     - venn
     - lxml
     - pridepy
+    - sdrf-pipelines
     - requests
     - pyopenms
     - ppx
