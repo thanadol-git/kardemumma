@@ -31,6 +31,11 @@ You can install the dependencies and set up the environment using [Conda](https:
    conda activate skyline-qc
    ```
 
+4. Install the package in editable mode:
+   ```bash
+   pip install -e .
+   ```
+
 ### Notes
 - All required dependencies will be installed via Conda and pip as specified in `environment.yml`.
 - Python 3.10 is recommended.
