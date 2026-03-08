@@ -8,3 +8,9 @@ data
 results
 export
 .venv
+
+# Package build / install
+*.egg-info/
+*.egg
+build/
+dist/
