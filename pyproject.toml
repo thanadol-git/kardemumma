@@ -12,3 +12,4 @@ dependencies = ["requests"]
 
 [project.urls]
 Homepage = "https://github.com/thanadol-git/skyline_qc"
+Issue = "https://github.com/thanadol-git/skyline_qc/issues"
