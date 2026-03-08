@@ -9,6 +9,11 @@ results
 export
 .venv
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
 # Package build / install
 *.egg-info/
 *.egg
