@@ -1,7 +1,7 @@
 import os
 import unittest
 import pandas as pd
-from .client import SkylineClient
+from .sdrf import validate_sdrf as validate_sdrf_file
 
 class ImportFile():
     def __init__(self, file_path: str):
@@ -54,4 +54,22 @@ class ImportFile():
             print(f"The following expected columns are missing from the file: {missing_columns}")
             print(f"Actual columns in the file: {list(df.columns)}")
             raise ValueError(f"The file {self.file_path} does not have the expected columns: {expected_columns}")
+        return df
+
+    def import_sdrf_file(self):
+        # 1. Check if the file exists
+        if not os.path.exists(self.file_path):
+            raise FileNotFoundError(f"The file {self.file_path} does not exist.")
+        
+        # 2. Check file type
+        if not self.file_path.lower().endswith('.tsv'):
+            raise ValueError("Provided file is not a TSV.")
+        
+        # 3. Read the file
+        df = pd.read_csv(self.file_path, sep='\t')
+
+        # 4. Validate the SDRF file (via sdrf-pipelines CLI)
+        ok, msg = validate_sdrf_file(self.file_path)
+        if not ok:
+            raise ValueError(f"SDRF validation failed: {msg}")
         return df
