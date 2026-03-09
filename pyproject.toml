@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Simple tools to clean up data from Skyline"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["requests", "pandas", "sdrf-pipelines[ontology]"]
+dependencies = ["requests", "pandas", "lxml", "sdrf-pipelines[ontology]"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
