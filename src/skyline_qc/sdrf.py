@@ -40,3 +40,29 @@ def validate_sdrf(sdrf_file: str) -> Tuple[bool, str]:
         msg = result.stderr.strip() or result.stdout.strip() or f"Validation failed with exit code {result.returncode}."
         return False, msg
 
+def readout_ms_type(sdrf_file: str) -> list:
+    """
+    Read all values in the 'comment[proteomics data acquisition method]' column of the SDRF file.
+
+    Args:
+        sdrf_file: Path to the SDRF file (e.g. .sdrf.tsv).
+
+    Returns:
+        list: All MS types found in the column (may contain duplicates, in row order).
+    """
+    import pandas as pd
+
+    if not os.path.exists(sdrf_file):
+        raise FileNotFoundError(f"SDRF file not found: {sdrf_file}")
+
+    df = pd.read_csv(sdrf_file, sep="\t")
+
+    col_name = "comment[proteomics data acquisition method]"
+    if col_name not in df.columns:
+        raise ValueError(f"Column '{col_name}' not found in SDRF file: {sdrf_file}")
+
+    ms_types = df[col_name].tolist()
+    return ms_types
+
+    
+    return "SRM"

@@ -41,6 +41,7 @@ def test_import_sdrf_file(sdrf_path: str = "sdrf/sdrf_MARTHA_combined.tsv"):
 
 def test_validate_sdrf(sdrf_path: str = "sdrf/sdrf_MARTHA_combined.tsv"):
     """Call validate_sdrf() and print result."""
+    print(f"Validating SDRF file: {sdrf_path}")
     ok, msg = validate_sdrf(sdrf_path)
     print("Success:", ok)
     print("Message:", msg)
