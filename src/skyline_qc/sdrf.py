@@ -1,10 +1,13 @@
 """
 SDRF (Sample and Data Relationship Format) validation using sdrf-pipelines.
-Requires: pip install sdrf-pipelines
+Requires: pip install sdrf-pipelines[ontology]
 """
 import os
 import subprocess
+import sys
 from typing import Tuple
+
+import pandas as pd
 
 
 def validate_sdrf(sdrf_file: str) -> Tuple[bool, str]:
@@ -24,12 +27,24 @@ def validate_sdrf(sdrf_file: str) -> Tuple[bool, str]:
     if not os.path.exists(sdrf_file):
         raise FileNotFoundError(f"SDRF file not found: {sdrf_file}")
 
-    result = subprocess.run(
-        ["parse_sdrf", "validate-sdrf", "--sdrf_file", os.path.abspath(sdrf_file)],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    # Prefer the parse_sdrf that belongs to the current Python environment
+    scripts_dir = os.path.dirname(sys.executable)
+    parse_sdrf_path = os.path.join(scripts_dir, "parse_sdrf")
+    cmd = [parse_sdrf_path, "validate-sdrf", "--sdrf_file", os.path.abspath(sdrf_file)]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            "Could not find 'parse_sdrf' in the current environment. "
+            "Make sure sdrf-pipelines is installed in this environment "
+            "and that you are using the correct Python/venv."
+        ) from exc
 
     # Check the subprocess result for SDRF validation
     if result.returncode == 0:
@@ -37,7 +52,11 @@ def validate_sdrf(sdrf_file: str) -> Tuple[bool, str]:
         return True, msg
     else:
         # Prefer stderr for error messages, fallback to stdout, then make a generic message
-        msg = result.stderr.strip() or result.stdout.strip() or f"Validation failed with exit code {result.returncode}."
+        msg = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or f"Validation failed with exit code {result.returncode}."
+        )
         return False, msg
 
 def readout_ms_type(sdrf_file: str) -> list:
@@ -50,7 +69,6 @@ def readout_ms_type(sdrf_file: str) -> list:
     Returns:
         list: All MS types found in the column (may contain duplicates, in row order).
     """
-    import pandas as pd
 
     if not os.path.exists(sdrf_file):
         raise FileNotFoundError(f"SDRF file not found: {sdrf_file}")
@@ -63,6 +81,3 @@ def readout_ms_type(sdrf_file: str) -> list:
 
     ms_types = df[col_name].tolist()
     return ms_types
-
-    
-    return "SRM"
