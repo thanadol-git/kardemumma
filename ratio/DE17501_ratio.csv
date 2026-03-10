@@ -1,0 +1,177 @@
+qRePS,Gene,Protein,Uniprot,Amount per well [pmol]
+QR3140513,A1BG,Alpha-1B-glycoprotein,P04217,1.327
+QR5000096,A2M,Alpha-2-macroglobulin,P01023,1.971
+QR0140749,ACTN1,Alpha-actinin-1,P12814,0.157
+QR0221144,ADA2,Adenosine deaminase 2,Q9NZK5,0.015
+QR5000237,ADAMTS13,A disintegrin and metalloproteinase with thrombospondin motifs 13,Q76LX8,0.057
+QR3790216,ADIPOQ,Adiponectin,Q15848,0.31
+QR0670086,AFM,Afamin,P43652,0.705
+QR0350062,AGT,Angiotensinogen,P01019,0.295
+QR0350074,AHSG,Alpha-2-HS-glycoprotein,P02765,7.279
+QR0380036,ALDOA,Fructose-bisphosphate aldolase A,P04075,0.112
+QR3450265,APOA1,Apolipoprotein A-I,P02647,17.382
+QR4430020,APOA2,Apolipoprotein A-II,P02652,25.731
+QR0260124,APOA4,Apolipoprotein A-IV,P06727,1.125
+QR5000600,APOB,Apolipoprotein B,P04114,0.835
+QR3730489,APOC1,Apolipoprotein C-I,P02654,3.875
+QR3920348,APOC2,Apolipoprotein C-II,P02655,1.066
+QR2760373,APOD,Apolipoprotein D,P05090,0.873
+QR4200068,APOE,Apolipoprotein E,P02649,0.737
+QR5000011,APOH,Beta-2-glycoprotein 1,P02749,1.287
+QR0350088,APOL1,Apolipoprotein L1,O14791,0.376
+QR3340379,APOM,Apolipoprotein M,O95445,0.706
+QR5000029,APP,Amyloid-beta precursor protein,P05067,0.237
+QR0350107,BCHE,Cholinesterase,P06276,0.039
+QR3210149,BLVRB,Flavin reductase (NADPH),P30043,0.482
+QR2960663,BTD,Biotinidase,P43251,0.13
+QR0280083,C1QC,Complement C1q subcomponent subunit C,P02747,0.14
+QR3560023,C1QTNF3,Complement C1q tumor necrosis factor-related protein 3,Q9BXJ4,0.494
+QR0280166,C1R,Complement C1r subcomponent,P00736,0.005
+QR5000342,C1RL,Complement C1r subcomponent-like protein,Q9NZP8,0.157
+QR0280085,C1S,Complement C1s subcomponent,P09871,0.352
+QR3700494,C2,Complement C2,P06681,0.307
+QR0280090,C3,Complement C3,P01024,5.735
+QR5000006,C4A,Complement C4-A,P0C0L4,0.703
+QR0280110,C4BPA,C4b-binding protein alpha chain,P04003,0.536
+QR4060158,C4BPB,C4b-binding protein beta chain,P20851,0.203
+QR4180150,C7,Complement component C7,P10643,0.338
+QR2551163,C8A,Complement component C8 alpha chain,P07357,0.154
+QR2550052,C8B,Complement component C8 beta chain,P07358,0.243
+QR3420318,C8G,Complement component C8 gamma chain,P07360,0.106
+QR5000059,C9,Complement component C9,P02748,0.351
+QR1850106,CD109,CD109 antigen,Q6YHK3,0.097
+QR0330212,CD14,Monocyte differentiation antigen CD14,P08571,0.085
+QR5000277,CD44,CD44 antigen,P16070,0.066
+QR0280170,CD55,Complement decay-accelerating factor,P08174,1.532
+QR1320001,CD9,CD9 antigen,P21926,0.893
+QR5000135,CD93,Complement component C1q receptor,Q9NPY3,0.077
+QR5000133,CDH13,Cadherin-13,P55290,0.129
+QR5000220,CEACAM5,Carcinoembryonic antigen-related cell adhesion molecule 5,P06731,0.054
+QR5000033,CFD,Complement factor D,P00746,0.651
+QR3720255,CFHR2,Complement factor H-related protein 2,P36980,0.224
+QR5000022,CFHR3,Complement factor H-related protein 3,Q02985,0.339
+QR5000138,CFHR4,Complement factor H-related protein 4,Q92496,0.079
+QR3730570,CFHR5,Complement factor H-related protein 5,Q9BXR6,0.439
+QR7000011,CFI,Complement factor I,P05156,0.532
+QR0510027,CHL1,Neural cell adhesion molecule L1-like protein,O00533,0.067
+QR0140424,CKB,Creatine kinase B-type,P12277,0.512
+QR2760280,CLEC3B,Tetranectin,P05452,0.09
+QR5000007,CLU,Clusterin,P10909,0.15
+QR7000007,CNDP1,Beta-Ala-His dipeptidase,Q96KN2,0.123
+QR5000489,COL18A1,Collagen alpha-1(XVIII) chain,P39060,0.044
+QR5000607,COL1A1,Collagen alpha-1(I) chain,P02452,0.147
+QR5000506,COLEC11,Collectin-11,Q9BWP8,0.144
+QR3250149,COMP,Cartilage oligomeric matrix protein,P49747,0.931
+QR5000488,CPN1,Carboxypeptidase N catalytic chain,P15169,0.121
+QR5000083,CPN2,Carboxypeptidase N subunit 2,P22792,0.242
+QR2550723,CRP,C-reactive protein,P02741,0.156
+QR0520106,CSF1R,Macrophage colony-stimulating factor 1 receptor,P07333,0.005
+QR5000001,CST3,Cystatin-C,P01034,0.346
+QR0350117,DBH,Dopamine beta-hydroxylase,P09172,0.194
+QR1420079,ECM1,Extracellular matrix protein 1,Q16610,0.472
+QR3700121,EFEMP1,EGF-containing fibulin-like extracellular matrix protein 1,Q12805,0.105
+QR0290109,EGFR,Epidermal growth factor receptor,P00533,0.259
+QR4290181,ENO2,Gamma-enolase,P09104,3.644
+QR0320022,ERBB2,Receptor tyrosine-protein kinase erbB-2,P04626,0.449
+QR3730418,F10,Coagulation factor X,P00742,0.463
+QR5000479,F11,Coagulation factor XI,P03951,1.118
+QR5000055,F12,Coagulation factor XII,P00748,0.659
+QR0350119,F13A1,Coagulation factor XIII A chain,P00488,0.026
+QR0350069,F13B,Coagulation factor XIII B chain,P05160,0.09
+QR7000006,F2,Prothrombin,P00734,1.871
+QR0350051,F5,Coagulation factor V,P12259,0.036
+QR4160204,F7,Coagulation factor VII,P08709,0.013
+QR5000483,F8,Coagulation factor VIII,P00451,0.143
+QR0230875,F9,Coagulation factor IX,P00740,0.59
+QR0350141,FBLN1,Fibulin-1,P23142,0.188
+QR5000005,FBLN5,Fibulin-5,Q9UBX5,0.068
+QR5000098,FCGR3B,Low affinity immunoglobulin gamma Fc region receptor III-B,O75015,0.04
+QR2960130,FETUB,Fetuin-B,Q9UGM5,0.116
+QR5000608,FN1,Fibronectin,P02751,0.44
+QR5000044,FTH1,Ferritin heavy chain,P02794,0.073
+QR3210087,FTL,Ferritin light chain,P02792,0.731
+QR3700186,GOT1,"Aspartate aminotransferase, cytoplasmic",P17174,0.818
+QR5000129,GP1BA,Platelet glycoprotein Ib alpha chain,P07359,0.026
+QR2310011,GPI,Glucose-6-phosphate isomerase,P06744,0.152
+QR5000649,GPX3,Glutathione peroxidase 3,P22352,0.051
+QR0350078,GSN,Gelsolin,P06396,0.681
+QR3940295,HABP2,Hyaluronan-binding protein 2,Q14520,0.481
+QR3440141,HBA1,Hemoglobin subunit alpha,P69905,1.824
+QR5000013,HP,Haptoglobin,P00738,16.556
+QR4200150,HPX,Hemopexin,P02790,2.319
+QR5000254,HSPA5,Endoplasmic reticulum chaperone BiP,P11021,0.024
+QR0330201,ICAM1,Intercellular adhesion molecule 1,P05362,0.167
+QR5000058,ICAM2,Intercellular adhesion molecule 2,P13598,0.359
+QR5000318,IGFBP1,Insulin-like growth factor-binding protein 1,P08833,0.547
+QR0350077,IGFBP3,Insulin-like growth factor-binding protein 3,P17936,0.069
+QR3140768,IGFBP4,Insulin-like growth factor-binding protein 4,P22692,0.06
+QR3760038,IL10,Interleukin-10,P22301,1.398
+QR0330007,IL6,Interleukin-6,P05231,0.045
+QR2460059,INHBC,Inhibin beta C chain,P55103,0.242
+QR3760404,ITIH2,Inter-alpha-trypsin inhibitor heavy chain H2,P19823,1.11
+QR0252445,ITIH3,Inter-alpha-trypsin inhibitor heavy chain H3,Q06033,0.236
+QR0300024,KLK3,Prostate-specific antigen,P07288,0.468
+QR0350008,KLKB1,Plasma kallikrein,P03952,0.21
+QR0350145,KNG1,Kininogen-1,P01042,1.919
+QR2350028,KRT1,"Keratin, type II cytoskeletal 1",P04264,1.271
+QR5000665,LDHA,L-lactate dehydrogenase A chain,P00338,0.071
+QR4290158,LDHB,L-lactate dehydrogenase B chain,P07195,0.533
+QR5000286,LEP,Leptin,P41159,0.106
+QR5000605,LPA,Apolipoprotein(a),P08519,0.017
+QR0350017,LRG1,Leucine-rich alpha-2-glycoprotein,P02750,0.428
+QR0350067,LUM,Lumican,P51884,0.433
+QR3700033,LYZ,Lysozyme C,P61626,0.241
+QR0350147,MASP1,Mannan-binding lectin serine protease 1,P48740,0.07
+QR0221208,MB,Myoglobin,P02144,0.174
+QR5000056,MBL2,Mannose-binding protein C,P11226,0.068
+QR2050084,MGP,Matrix Gla protein,P08493,0.122
+QR0280052,MPO,Myeloperoxidase,P05164,0.07
+QR1950365,MSLN,Mesothelin,Q13421,0.215
+QR5000273,MST1,Hepatocyte growth factor-like protein,P26927,0.544
+QR5000308,NPPB,Natriuretic peptides B,P16860,0.451
+QR2440268,PCOLCE,Procollagen C-endopeptidase enhancer 1,Q15113,0.732
+QR5000360,PCSK9,Proprotein convertase subtilisin/kexin type 9,Q8NBP7,0.216
+QR3230185,PFN1,Profilin-1,P07737,0.166
+QR3280115,PGLYRP2,N-acetylmuramoyl-L-alanine amidase,Q96PD5,0.389
+QR1370174,PIGR,Polymeric immunoglobulin receptor,P01833,0.214
+QR7000014,PKM,Pyruvate kinase PKM,P14618,0.437
+QR2540982,PLEC,Plectin,Q15149,0.036
+QR5000060,PON1,Serum paraoxonase/arylesterase 1,P27169,0.598
+QR1510029,PPBP,Platelet basic protein,P02775,0.205
+QR5000508,PPIA,Peptidyl-prolyl cis-trans isomerase A,P62937,0.12
+QR1420200,PRDX6,Peroxiredoxin-6,P30041,0.064
+QR2550357,PRG4,Proteoglycan 4,Q92954,0.056
+QR2350034,PRL,Prolactin,P01236,0.269
+QR0330194,PROC,Vitamin K-dependent protein C,P04070,0.026
+QR7000010,PROCR,Endothelial protein C receptor,Q9UNN8,0.009
+QR0350029,PROS1,Vitamin K-dependent protein S,P07225,0.415
+QR5000224,PROZ,Vitamin K-dependent protein Z,P22891,0.132
+QR1320007,PTGDS,Prostaglandin-H2 D-isomerase,P41222,0.06
+QR5000125,PVR,Poliovirus receptor,P15151,0.043
+QR5000019,PZP,Pregnancy zone protein,P20742,0.102
+QR3420003,QSOX1,Sulfhydryl oxidase 1,O00391,0.019
+QR7000009,RBP4,Retinol-binding protein 4,P02753,2.188
+QR1420103,S100A8,Protein S100-A8,P05109,0.097
+QR0400189,S100A9,Protein S100-A9,P06702,0.052
+QR5000092,SELL,L-selectin,P14151,0.09
+QR5000084,SERPINA4,Kallistatin,P29622,0.054
+QR5000085,SERPINA5,Plasma serine protease inhibitor,P05154,0.342
+QR0140840,SERPINA6,Corticosteroid-binding globulin,P08185,0.411
+QR5000095,SERPINA7,Thyroxine-binding globulin,P05543,0.046
+QR3920037,SERPIND1,Heparin cofactor 2,P05546,0.093
+QR0350091,SERPINE1,Plasminogen activator inhibitor 1,P05121,0.075
+QR4340066,SERPINF1,Pigment epithelium-derived factor,P36955,0.253
+QR0350052,SERPINF2,Alpha-2-antiplasmin,P08697,0.537
+QR4370306,SERPING1,Plasma protease C1 inhibitor,P05155,0.677
+QR0350126,SHBG,Sex hormone-binding globulin,P04278,0.084
+QR5000610,SPP1,Osteopontin,P10451,0.992
+QR0670072,TFRC,Transferrin receptor protein 1,P02786,0.019
+QR0350042,TG,Thyroglobulin,P01266,0.137
+QR1770044,TGFBI,Transforming growth factor-beta-induced protein ig-h3,Q15582,0.067
+QR2400003,THBS4,Thrombospondin-4,P35443,0.811
+QR0670024,TNFRSF1B,Tumor necrosis factor receptor superfamily member 1B,P20333,3.578
+QR1920099,VASN,Vasorin,Q6EMK4,0.03
+QR4030673,VTN,Vitronectin,P04004,0.975
+QR0330186,VWF,von Willebrand factor,P04275,0.029
+QR0670322,WFDC2,WAP four-disulfide core domain protein 2,Q14508,5.494
+QR0670248,ZYX,Zyxin,Q15942,0.139
