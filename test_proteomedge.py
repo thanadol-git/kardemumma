@@ -30,9 +30,12 @@ def main() -> None:
         print(f"Error fetching qRePS table: {exc}")
         sys.exit(1)
 
+    # Save the DataFrame to a local CSV file instead of displaying it or showing HTML
+    outfilename = "qreps_ratio_table.csv"
+    df.to_csv(outfilename, index=False)
     print(f"OK: loaded {len(df)} rows, {len(df.columns)} columns")
     print("Columns:", list(df.columns))
-    print(df.head())
+    print(f"Saved table as {outfilename}")
 
 
 if __name__ == "__main__":
