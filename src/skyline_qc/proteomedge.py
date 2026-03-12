@@ -38,6 +38,16 @@ def fetch_qreps_table(link_or_lot: str) -> pd.DataFrame:
 
     raise ValueError("Could not find qRePS data table on the page.")
 
+def extract_lot_number(link_or_lot: str) -> str:
+    """
+    Extract the lot number from a given lot number or full ProteomEdge lot URL.
+    """
+    url_pattern = r'/lotdata/(\w+)/'
+    match = re.search(url_pattern, link_or_lot)
+    if match:
+        return match.group(1)
+    return link_or_lot.strip()
+
 def load_qRePs(link_or_lot: str) -> tuple[pd.DataFrame, str]:
     """
     Load the qRePS data table for a given lot number or full ProteomEdge lot URL.
