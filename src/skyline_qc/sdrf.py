@@ -61,23 +61,22 @@ def validate_sdrf(sdrf_file: str) -> Tuple[bool, str]:
 
 def readout_ms_type(sdrf_file: str) -> list:
     """
-    Read all values in the 'comment[proteomics data acquisition method]' column of the SDRF file.
+    Return a list of unique values from the
+    'comment[proteomics data acquisition method]' column in the SDRF file,
+    preserving their original row order.
 
     Args:
         sdrf_file: Path to the SDRF file (e.g. .sdrf.tsv).
 
     Returns:
-        list: All MS types found in the column (may contain duplicates, in row order).
+        list: Unique MS types, in order of appearance.
     """
-
     if not os.path.exists(sdrf_file):
         raise FileNotFoundError(f"SDRF file not found: {sdrf_file}")
 
     df = pd.read_csv(sdrf_file, sep="\t")
-
     col_name = "comment[proteomics data acquisition method]"
     if col_name not in df.columns:
         raise ValueError(f"Column '{col_name}' not found in SDRF file: {sdrf_file}")
 
-    ms_types = df[col_name].tolist()
-    return ms_types
+    return df[col_name].drop_duplicates().tolist()
