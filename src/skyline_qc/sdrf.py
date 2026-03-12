@@ -80,3 +80,55 @@ def readout_ms_type(sdrf_file: str) -> list:
         raise ValueError(f"Column '{col_name}' not found in SDRF file: {sdrf_file}")
 
     return df[col_name].drop_duplicates().tolist()
+
+def csv_to_tsv(csv_file: str, tsv_file: str) -> None:
+    """
+    Convert a CSV file to a TSV file.
+    """
+    df = pd.read_csv(csv_file, sep=",")
+    df.to_csv(tsv_file, sep="\t", index=False)  
+
+def remove_whitespace(sdrf_file: str) -> None:
+    """
+    Remove whitespace from the SDRF file.
+    """
+    df = pd.read_csv(sdrf_file, sep="\t")
+    # pandas >= 3.0 removed DataFrame.applymap; use column-wise map instead
+    df = df.apply(lambda col: col.map(lambda x: x.strip() if isinstance(x, str) else x))
+    df.to_csv(sdrf_file, sep="\t", index=False)
+
+def detect_trailing_whitespace(sdrf_file: str) -> bool:
+    """
+    Detect trailing whitespace in the SDRF file. Print and highlight locations and columns in the dataframe if found.
+
+    Returns True if no trailing/leading whitespace is found, False if any is detected.
+    """
+    import numpy as np
+
+    df = pd.read_csv(sdrf_file, sep="\t")
+    has_whitespace = False
+    # pandas >= 3.0 removed DataFrame.applymap; build a boolean mask column-wise
+    mask = df.apply(
+        lambda col: col.map(lambda x: isinstance(x, str) and (x != x.strip()))
+    )
+    problem_columns = set()
+
+    if mask.values.any():
+        has_whitespace = True
+        print("Trailing or leading whitespace detected at the following locations:")
+        for (row, col), flagged in np.ndenumerate(mask.values):
+            if flagged:
+                row_label = row + 2  # +2 for header and zero indexing
+                col_name = df.columns[col]
+                problem_columns.add(col_name)
+                original = df.iloc[row, col]
+                print(
+                    f"  Row {row_label}, Column '{col_name}': ->{original!r}<-"
+                )
+        if problem_columns:
+            print("\nColumns with one or more cells containing leading/trailing whitespace:")
+            for col_name in problem_columns:
+                print(f"  - {col_name}")
+    else:
+        print("No leading or trailing whitespace detected in the SDRF file.")
+    return not has_whitespace
