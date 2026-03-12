@@ -90,11 +90,19 @@ def csv_to_tsv(csv_file: str, tsv_file: str) -> None:
 
 def remove_whitespace(sdrf_file: str) -> None:
     """
-    Remove whitespace from the SDRF file.
+    Remove leading and trailing whitespace from all string cells
+    in the SDRF file (in place, overwriting the file).
     """
     df = pd.read_csv(sdrf_file, sep="\t")
-    # pandas >= 3.0 removed DataFrame.applymap; use column-wise map instead
-    df = df.apply(lambda col: col.map(lambda x: x.strip() if isinstance(x, str) else x))
+    # Build a boolean mask of which cells are strings with leading/trailing whitespace
+    mask = df.apply(
+        lambda col: col.map(lambda x: isinstance(x, str) and (x != x.strip()))
+    )
+    # Only strip for cells that are strings and have whitespace
+    for col in df.columns:
+        str_mask = mask[col]
+        if str_mask.any():
+            df.loc[str_mask, col] = df.loc[str_mask, col].map(lambda x: x.strip() if isinstance(x, str) else x)
     df.to_csv(sdrf_file, sep="\t", index=False)
 
 def detect_trailing_whitespace(sdrf_file: str) -> bool:
