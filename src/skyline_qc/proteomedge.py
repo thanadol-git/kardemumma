@@ -1,7 +1,6 @@
 # scrape concentration data from the web
 
 import io
-import sys
 import re
 from datetime import datetime
 import requests
@@ -43,10 +42,21 @@ def fetch_qreps_table(link_or_lot: str) -> pd.DataFrame:
 def extract_lot_number(link_or_lot: str) -> str:
     """
     Extract the lot number from a given lot number or full ProteomEdge lot URL.
+
+    If a URL is provided, the lot number is extracted from the path.
+    If a plain lot number string is provided, it is returned as-is.
+
+    Raises:
+        ValueError: If a URL is provided but the lot number cannot be extracted.
     """
     url_pattern = r'/lotdata/(\w+)/'
-    match = re.search(url_pattern, link_or_lot)
-    if match:
+    if link_or_lot.startswith("http"):
+        match = re.search(url_pattern, link_or_lot)
+        if not match:
+            raise ValueError(
+                f"Could not extract lot number from URL: {link_or_lot!r}. "
+                "Expected format: https://proteomedge.com/lotdata/<lot>/"
+            )
         return match.group(1)
     return link_or_lot.strip()
 
@@ -61,11 +71,10 @@ def load_qRePs(link_or_lot: str) -> tuple[pd.DataFrame, str]:
         pd.DataFrame: DataFrame containing the qRePS data.
         str: The filename of the saved CSV file.
     """
-    df = fetch_qreps_table(link_or_lot) 
+    df = fetch_qreps_table(link_or_lot)
     lot_number = extract_lot_number(link_or_lot)
     if not lot_number:
-        print("Could not determine lot number for filename.")
-        sys.exit(1)
+        raise ValueError("Could not determine lot number for filename.")
     today_str = datetime.now().strftime("%Y%m%d")
     out_file = f"{today_str}_{lot_number}_qRePs.csv"
     df.to_csv(out_file, index=False)

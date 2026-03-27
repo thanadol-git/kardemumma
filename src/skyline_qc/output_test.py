@@ -1,10 +1,13 @@
 import os
-import unittest
 import pandas as pd
 from .sdrf import validate_sdrf as validate_sdrf_file
 
 class ImportFile():
     def __init__(self, file_path: str):
+        """
+        Args:
+            file_path: Path to the file to import.
+        """
         self.file_path = file_path
     
     def import_skyline_file(self):
@@ -42,18 +45,12 @@ class ImportFile():
         ]
         
         # 6. Check if the file has the expected columns
-        if not all(col in df.columns for col in expected_columns):
-            print(f"The file {self.file_path} does not have the expected columns. Expected:")
-            for col in expected_columns:
-                print(col)
-            raise ValueError(f"The file {self.file_path} does not have the expected columns.")
-        
-        # 7. Cross-check expected columns with actual column names from the file.
         missing_columns = [col for col in expected_columns if col not in df.columns]
         if missing_columns:
-            print(f"The following expected columns are missing from the file: {missing_columns}")
-            print(f"Actual columns in the file: {list(df.columns)}")
-            raise ValueError(f"The file {self.file_path} does not have the expected columns: {expected_columns}")
+            raise ValueError(
+                f"The file {self.file_path} is missing expected columns: {missing_columns}. "
+                f"Actual columns: {list(df.columns)}"
+            )
         return df
 
     def import_sdrf_file(self):

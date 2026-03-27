@@ -22,7 +22,6 @@ dependencies:
     - statsmodels
     - click
     - matplotlib
-    - pandas
     - openpyxl
     - seaborn
     - venn

@@ -7,6 +7,7 @@ import subprocess
 import sys
 from typing import Tuple
 
+import numpy as np
 import pandas as pd
 
 
@@ -88,31 +89,30 @@ def csv_to_tsv(csv_file: str, tsv_file: str) -> None:
     df = pd.read_csv(csv_file, sep=",")
     df.to_csv(tsv_file, sep="\t", index=False)  
 
-def remove_whitespace(sdrf_file: str) -> None:
+def remove_whitespace(sdrf_file: str, out_file: str | None = None) -> None:
     """
-    Remove leading and trailing whitespace from all string cells
-    in the SDRF file (in place, overwriting the file).
+    Remove leading and trailing whitespace from all string cells in the SDRF file.
+
+    Args:
+        sdrf_file: Path to the input SDRF file.
+        out_file: Path to write the cleaned file. If None, overwrites the input file.
     """
     df = pd.read_csv(sdrf_file, sep="\t")
-    # Build a boolean mask of which cells are strings with leading/trailing whitespace
     mask = df.apply(
         lambda col: col.map(lambda x: isinstance(x, str) and (x != x.strip()))
     )
-    # Only strip for cells that are strings and have whitespace
     for col in df.columns:
         str_mask = mask[col]
         if str_mask.any():
             df.loc[str_mask, col] = df.loc[str_mask, col].map(lambda x: x.strip() if isinstance(x, str) else x)
-    df.to_csv(sdrf_file, sep="\t", index=False)
+    df.to_csv(out_file if out_file is not None else sdrf_file, sep="\t", index=False)
 
 def detect_trailing_whitespace(sdrf_file: str) -> bool:
     """
     Detect trailing whitespace in the SDRF file. Print and highlight locations and columns in the dataframe if found.
 
-    Returns True if no trailing/leading whitespace is found, False if any is detected.
+    Returns True if any leading/trailing whitespace is detected, False if the file is clean.
     """
-    import numpy as np
-
     df = pd.read_csv(sdrf_file, sep="\t")
     has_whitespace = False
     # pandas >= 3.0 removed DataFrame.applymap; build a boolean mask column-wise
@@ -139,4 +139,4 @@ def detect_trailing_whitespace(sdrf_file: str) -> bool:
                 print(f"  - {col_name}")
     else:
         print("No leading or trailing whitespace detected in the SDRF file.")
-    return not has_whitespace
+    return has_whitespace

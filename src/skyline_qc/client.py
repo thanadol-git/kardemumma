@@ -26,8 +26,11 @@ class SkylineClient:
 
     def get(self, path: str, **params: Any) -> Dict[str, Any]:
         url = self.base_url.rstrip("/") + "/" + path.lstrip("/")
-        response = requests.get(url, headers=self._headers(), params=params, timeout=60)
-        response.raise_for_status()
+        try:
+            response = requests.get(url, headers=self._headers(), params=params, timeout=60)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            raise RuntimeError(f"Request to {url} failed: {exc}") from exc
         return response.json()
 
     def list_documents(self) -> Dict[str, Any]:
