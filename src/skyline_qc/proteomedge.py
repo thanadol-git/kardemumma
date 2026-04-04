@@ -118,3 +118,23 @@ def load_qRePs(link_or_lot: str) -> tuple[pd.DataFrame, str]:
     out_file = f"{today_str}_{lot_number}_qRePs.csv"
     df.to_csv(out_file, index=False)
     return df, out_file 
+
+def load_qRePs_to_csv(link_or_lot: str) -> tuple[pd.DataFrame, str]:
+    """
+    Load the qRePS data table for a given lot number or full ProteomEdge lot URL and save it to a csv file.
+
+    Args:
+        link_or_lot: Lot number as a string (e.g., '23002') or the full lot URL.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the qRePS data.
+        str: The filename of the saved csv file.
+    """
+    df = fetch_qreps_table(link_or_lot)
+    lot_number = extract_lot_number(link_or_lot)
+    if not lot_number:
+        raise ValueError("Could not determine lot number for filename.")
+    today_str = datetime.now().strftime("%Y%m%d")
+    out_file = f"{today_str}_{lot_number}_qRePs.csv"
+    df.to_csv(out_file, index=False)
+    return df, out_file 
