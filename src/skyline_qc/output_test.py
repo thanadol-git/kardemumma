@@ -6,6 +6,39 @@ import pandas as pd
 from .sdrf import validate_sdrf as validate_sdrf_file
 
 
+def get_irt_peptides(
+    df: pd.DataFrame,
+    *,
+    protein_col: str = "Protein Name",
+    peptide_col: str = "Peptide Sequence",
+    tag_substring: str = "iRT_Tag",
+) -> List[str]:
+    """
+    Unique peptide sequences for rows whose protein name contains the iRT tag
+    marker (default substring ``iRT_Tag``), in first-seen order.
+
+    Args:
+        df: Skyline report table (e.g. from ``ImportFile.import_skyline_file``).
+        protein_col: Column with protein / group name.
+        peptide_col: Column with peptide sequence.
+        tag_substring: Literal substring to match in ``protein_col`` (not a regex).
+
+    Returns:
+        List of distinct peptide sequences.
+    """
+    missing = [c for c in (protein_col, peptide_col) if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Missing column(s) {missing}. Found: {list(df.columns)}"
+        )
+    mask = (
+        df[protein_col]
+        .astype(str)
+        .str.contains(tag_substring, na=False, regex=False)
+    )
+    return df.loc[mask, peptide_col].drop_duplicates().tolist()
+
+
 def _suggest_qc_replicate_names(df: pd.DataFrame) -> List[str]:
     """
     Distinct Replicate labels that look like QC (substring 'qc', case-insensitive).
@@ -25,7 +58,7 @@ class ImportFile():
             file_path: Path to the file to import.
         """
         self.file_path = file_path
-    
+    ### Skyline file ###
     def import_skyline_file(self):
         
         # 1. Check if the file exists
@@ -98,7 +131,19 @@ class ImportFile():
                 raise ValueError("Provided file is not a CSV.")
             df = pd.read_csv(self.file_path)
         return _suggest_qc_replicate_names(df)
+    ### qREPs file ###
+    def import_qreps_file(self):
+        """
+        Import the qREPs file.
+        """
+        if not os.path.exists(self.file_path):
+            raise FileNotFoundError(f"The file {self.file_path} does not exist.")
+        if not self.file_path.lower().endswith(".csv"):
+            raise ValueError("Provided file is not a CSV.")
+        df = pd.read_csv(self.file_path)
+        return df
 
+    ### SDRF file ###
     def import_sdrf_file(self):
         # 1. Check if the file exists
         if not os.path.exists(self.file_path):
@@ -152,3 +197,15 @@ class CheckSkylineFile():
             raise ValueError("Provided file is not a CSV.")
         df = pd.read_csv(self.file_path)
         return _suggest_qc_replicate_names(df)
+    
+    def get_irt_peptides(self) -> List[str]:
+        """
+        Load this CSV and return iRT peptide sequences (same rules as
+        :func:`get_irt_peptides`).
+        """
+        if not os.path.exists(self.file_path):
+            raise FileNotFoundError(f"The file {self.file_path} does not exist.")
+        if not self.file_path.lower().endswith(".csv"):
+            raise ValueError("Provided file is not a CSV.")
+        df = pd.read_csv(self.file_path)
+        return get_irt_peptides(df)
