@@ -23,6 +23,12 @@ def fetch_qreps_table(link_or_lot: str) -> pd.DataFrame:
     # See also extract_lot_number for getting a normalized lot number:
     # lot_only = extract_lot_number("https://proteomedge.com/lotdata/23002/")
     # print(lot_only)  # Output: "23002"
+    #
+    # Example:
+    #     import skyline_qc.proteomedge as pe
+    #     df = pe.fetch_qreps_table("23002")
+    #     print(df.head())
+
 
 
     Args:
