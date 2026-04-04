@@ -51,6 +51,9 @@ class ImportFile():
                 f"The file {self.file_path} is missing expected columns: {missing_columns}. "
                 f"Actual columns: {list(df.columns)}"
             )
+        
+        # Print if the file is valid
+        print(f"The file {self.file_path} is valid.")
         return df
 
     def import_sdrf_file(self):
