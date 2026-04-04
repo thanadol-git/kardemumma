@@ -10,6 +10,20 @@ import pandas as pd
 def fetch_qreps_table(link_or_lot: str) -> pd.DataFrame:
     """
     Fetch the qRePS data table for a given lot number or full ProteomEdge lot URL.
+    # Example of usage:
+    #
+    # Fetch by lot number:
+    # df = fetch_qreps_table("23002")
+    # print(df.head())
+    #
+    # Fetch by full URL:
+    # df = fetch_qreps_table("https://proteomedge.com/lotdata/23002/")
+    # print(df.head())
+    #
+    # See also extract_lot_number for getting a normalized lot number:
+    # lot_only = extract_lot_number("https://proteomedge.com/lotdata/23002/")
+    # print(lot_only)  # Output: "23002"
+
 
     Args:
         link_or_lot: Lot number as a string (e.g., '23002') or the full lot URL.
@@ -45,6 +59,31 @@ def extract_lot_number(link_or_lot: str) -> str:
 
     If a URL is provided, the lot number is extracted from the path.
     If a plain lot number string is provided, it is returned as-is.
+    # Example of usage:
+    #
+    # Given a lot number as a string:
+    # lot = "23002"
+    # lot_only = extract_lot_number(lot)
+    # print(lot_only)  # Output: "23002"
+    #
+    # Given a ProteomEdge lot URL starting with https:
+    # url = "https://proteomedge.com/lotdata/23002/"
+    # lot_only = extract_lot_number(url)
+    # print(lot_only)  # Output: "23002"
+    #
+    # Given a ProteomEdge lot URL starting with www:
+    # url2 = "www.proteomedge.com/lotdata/23002/"
+    # lot_only2 = extract_lot_number(url2)
+    # print(lot_only2)  # Output: "23002"
+    #
+    # Given a ProteomEdge lot URL without protocol:
+    # url3 = "proteomedge.com/lotdata/23002/"
+    # lot_only3 = extract_lot_number(url3)
+    # print(lot_only3)  # Output: "23002"
+    #
+    # If the URL does not match the expected pattern,
+    # extract_lot_number will raise a ValueError.
+
 
     Raises:
         ValueError: If a URL is provided but the lot number cannot be extracted.
