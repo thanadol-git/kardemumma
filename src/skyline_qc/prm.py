@@ -23,12 +23,15 @@ from __future__ import annotations
 
 from typing import Optional
 
+import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
 
 
 # ---------------------------------------------------------------------------
 # Coefficient of Variation
 # ---------------------------------------------------------------------------
+
 
 def compute_cv(
     df: pd.DataFrame,
@@ -74,6 +77,7 @@ def compute_cv(
 # ---------------------------------------------------------------------------
 # Missing-value / detection summary
 # ---------------------------------------------------------------------------
+
 
 def flag_missing_values(
     df: pd.DataFrame,
@@ -133,6 +137,7 @@ def flag_missing_values(
 # Dot-product quality summary
 # ---------------------------------------------------------------------------
 
+
 def dot_product_summary(
     df: pd.DataFrame,
     lib_dot_col: str = "Library Dot Product",
@@ -187,6 +192,7 @@ def dot_product_summary(
 # Retention-time deviation
 # ---------------------------------------------------------------------------
 
+
 def retention_time_deviation(
     df: pd.DataFrame,
     observed_col: str = "Peptide Retention Time",
@@ -228,7 +234,7 @@ def retention_time_deviation(
     result = result.rename(
         columns={observed_col: "rt_observed", predicted_col: "rt_predicted"}
     )
-    result["rt_dev"] = result["rt_observed"] - result["rt_predicted"]
+    result["rt_dev"] = (result["rt_observed"] - result["rt_predicted"]).round(6)
     result["abs_rt_dev"] = result["rt_dev"].abs()
     return result.sort_values("abs_rt_dev", ascending=False).reset_index(drop=True)
 
@@ -236,6 +242,7 @@ def retention_time_deviation(
 # ---------------------------------------------------------------------------
 # High-level summary
 # ---------------------------------------------------------------------------
+
 
 def summarize_prm(
     df: pd.DataFrame,
@@ -286,7 +293,9 @@ def summarize_prm(
     """
     cv_df = compute_cv(df, value_col=cv_col)
     missing_df = flag_missing_values(df)
-    dot_df = dot_product_summary(df, lib_threshold=lib_threshold, ratio_threshold=ratio_threshold)
+    dot_df = dot_product_summary(
+        df, lib_threshold=lib_threshold, ratio_threshold=ratio_threshold
+    )
     rt_df = retention_time_deviation(df)
 
     n_precursors = df["Precursor"].nunique()
@@ -306,3 +315,133 @@ def summarize_prm(
         "pct_rt_within": round(pct_rt_within, 2),
         "median_cv_pct": round(median_cv, 2),
     }
+
+
+# ---------------------------------------------------------------------------
+# Filtering
+# ---------------------------------------------------------------------------
+
+
+def filter_library_dot_product(
+    df: pd.DataFrame,
+    *,
+    threshold: float = 0.8,
+    col: str = "Library Dot Product",
+) -> pd.DataFrame:
+    """
+    Keep rows where library dot product is **strictly greater** than *threshold*.
+
+    Args:
+        df: Skyline report DataFrame.
+        threshold: Minimum Library Dot Product (exclusive below; rows with
+            value equal to *threshold* are removed). Default ``0.8``.
+        col: Column name for library dot product.
+
+    Raises:
+        KeyError: If *col* is missing from *df*.
+    """
+    if col not in df.columns:
+        raise KeyError(f"Column '{col}' not found in DataFrame.")
+    
+    df = df.loc[df[col] > threshold].copy()
+
+    # Remove rows where 'Normalized Area' is NaN, matching ratio_picking.ipynb data cleaning
+    df = df[df['Normalized Area'].notna()]
+    # prepare pivot table 
+
+    index_cols = [col for col in df.columns if col not in ['Isotope Label Type', 'Intensity']]  
+    pivot_df = df.pivot_table(
+        index=['Replicate', 'Protein Name', 'Peptide'],   
+        columns='Isotope Label Type',
+        values='Normalized Area',
+        aggfunc='first').reset_index()
+    return pivot_df 
+
+def summarise_peptide_counts(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Summarise the peptide counts in the DataFrame.
+    """
+    pept_sum = df.groupby(['Protein Name','Peptide']).agg(
+        heavy_count=pd.NamedAgg(column='heavy', aggfunc=lambda x: x.notna().sum()),
+        light_count=pd.NamedAgg(column='light', aggfunc=lambda x: x.notna().sum())
+    ).reset_index() 
+
+    # Order by sum of heavy and light counts
+    pept_sum = pept_sum.sort_values(by=['heavy_count', 'light_count'], ascending=False)
+    return pept_sum.reset_index(drop=True) 
+
+def report_peptide_protein_summary(peptide_counts):
+    """
+    Report summary statistics on peptide and protein detection.
+
+    Args:
+        skyline_data: DataFrame containing raw skyline data.
+        peptide_counts: DataFrame containing summarised peptide counts, must include 'Peptide', 'heavy_count', and 'light_count'.
+
+    Returns:
+        summary_dict: Dictionary with summary statistics.
+    """
+    # Count the number of unique peptides and proteins in the data
+    expected_columns = ['Protein Name', 'Peptide', 'heavy_count', 'light_count']
+    if not all(col in peptide_counts.columns for col in expected_columns):
+        raise ValueError(f"Expected columns {expected_columns} not found in peptide_counts")
+
+    # For peptide_counts, Protein Name may be missing, so map peptide->protein using skyline_data
+    num_unique_peptides = peptide_counts['Peptide'].nunique()
+    num_unique_proteins = peptide_counts['Protein Name'].nunique()
+
+    summary_dict = {
+        'num_unique_peptides': num_unique_peptides,
+        'num_unique_proteins': num_unique_proteins,
+    }
+
+    print(f"Number of unique peptides: {num_unique_peptides}")
+    print(f"Number of unique proteins: {num_unique_proteins}")
+
+    return summary_dict
+
+def plot_heavy_light_scatter(peptide_counts):
+    """
+    Scatter plot of heavy vs. light peptide counts for each peptide.
+
+    Args:
+        peptide_counts (pd.DataFrame): DataFrame with columns 'Peptide', 'heavy_count', 'light_count'
+    """
+    plt.figure(figsize=(8, 6))
+    plt.scatter(peptide_counts['heavy_count'], peptide_counts['light_count'], alpha=0.6)
+    plt.xlabel("Heavy Count")
+    plt.ylabel("Light Count")
+    plt.title("Scatter plot of Heavy vs. Light Peptide Counts")
+    plt.grid(True)
+    # Optionally draw y=x reference line
+    min_val = min(peptide_counts['heavy_count'].min(), peptide_counts['light_count'].min())
+    max_val = max(peptide_counts['heavy_count'].max(), peptide_counts['light_count'].max())
+    plt.plot([min_val, max_val], [min_val, max_val], 'r--', lw=1)
+    plt.tight_layout()
+    plt.show()
+
+# ---------------------------------------------------------------------------
+# Plotting
+# ---------------------------------------------------------------------------
+
+
+def plot_library_dot_product_distribution(df: pd.DataFrame) -> None:
+    """Histogram (+ KDE) of ``Library Dot Product``."""
+    col = "Library Dot Product"
+    if col not in df.columns:
+        raise KeyError(f"Column '{col}' not found in DataFrame.")
+    plt.figure(figsize=(10, 6))
+    sns.histplot(df[col], bins=20, kde=True)
+    plt.title("Distribution of Library Dot Product")
+    plt.xlabel("Library Dot Product")
+    plt.show()
+
+def plot_peptide_counts(df: pd.DataFrame) -> None:
+    """
+    Plot the peptide counts in the DataFrame.
+    """
+    plt.figure(figsize=(10, 6))
+    sns.histplot(df['heavy_count'], bins=20, kde=True)
+    plt.title("Distribution of Heavy Peptide Counts")
+    plt.xlabel("Heavy Peptide Counts")
+    plt.show()

@@ -184,6 +184,9 @@ class CheckSkylineFile():
         
         # 3. Read the file
         df = pd.read_csv(self.file_path)
+
+        # Sort by Replicate and Peptide
+        df = df.sort_values(by=['Replicate', 'Peptide'])
         return df
 
     def suggest_qc_samples(self) -> List[str]:
@@ -197,7 +200,13 @@ class CheckSkylineFile():
             raise ValueError("Provided file is not a CSV.")
         df = pd.read_csv(self.file_path)
         return _suggest_qc_replicate_names(df)
-    
+
+    def get_qc_data(self, qc_samples: List[str], df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Get QC data from the Skyline data object.
+        """
+        return df[df['Replicate'].isin(qc_samples)]
+
     def get_irt_peptides(self) -> List[str]:
         """
         Load this CSV and return iRT peptide sequences (same rules as
@@ -209,3 +218,27 @@ class CheckSkylineFile():
             raise ValueError("Provided file is not a CSV.")
         df = pd.read_csv(self.file_path)
         return get_irt_peptides(df)
+
+    def get_test_samples(self, qc_samples: List[str], df: pd.DataFrame) -> List[str]:
+        """
+        Return a list of test sample names by excluding QC samples from the distinct Replicate names in the given DataFrame.
+        
+        Args:
+            qc_samples: List of QC sample names to exclude.
+            df: DataFrame containing Skyline data, must include a 'Replicate' column.
+        
+        Returns:
+            List of unique test sample names.
+        """
+        all_samples = set(df["Replicate"].unique())
+        test_samples = sorted(list(all_samples - set(qc_samples)))
+        return test_samples
+
+    def get_test_data(self, test_samples: List[str], df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Get test data from the Skyline data object and list of test samples. It basically remove test samples from the skyline data object.
+        """
+        df = df[df['Replicate'].isin(test_samples)]
+        # Sort by Replicate and Peptide
+        df = df.sort_values(by=['Replicate', 'Peptide'])
+        return df
