@@ -366,8 +366,14 @@ def summarise_peptide_counts(df: pd.DataFrame) -> pd.DataFrame:
         light_count=pd.NamedAgg(column='light', aggfunc=lambda x: x.notna().sum())
     ).reset_index() 
 
-    # Order by sum of heavy and light counts
-    pept_sum = pept_sum.sort_values(by=['heavy_count', 'light_count'], ascending=False)
+    # Sort by the sum of heavy and light counts
+    pept_sum = pept_sum.sort_values(
+        by=['heavy_count', 'light_count'],
+        ascending=[False, False]
+    ) # Fix the sum
+
+    
+
     return pept_sum.reset_index(drop=True) 
 
 def report_peptide_protein_summary(peptide_counts):
