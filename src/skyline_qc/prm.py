@@ -27,6 +27,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import numpy as np
+import statsmodels.formula.api as smf
+from statsmodels.stats.anova import anova_lm
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +403,98 @@ def summarise_peptide_counts(peptide_counts_df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
     return pept_sum
+def get_plate_conversion_factors(df):
+    """
+    Fit a model: log_ratio ~ C(Plate) to extract plate conversion factors.
+    This gives the correction (as multiplicative factor) for each plate to equalize across plates.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing at least 'log_ratio' and 'Plate' columns.
+
+    Returns:
+        conv_factors_df (pd.DataFrame): DataFrame with columns ['Plate', 'conversion_factor'].
+        conversion_factors (dict): Dictionary mapping Plate value to its conversion factor.
+        model (statsmodels.regression.linear_model.RegressionResultsWrapper): The fitted model.
+    """
+    # Fit OLS model
+    m = smf.ols('log_ratio ~ C(Plate)', data=df).fit()
+
+    # Extract coefficients and convert to multiplicative factors
+    plate_effects = m.params.filter(like='C(Plate)')
+    # The intercept represents the reference plate's mean log(ratio)
+    reference_plate = df['Plate'].unique()
+    if isinstance(df['Plate'].iloc[0], str):
+        # some columns come in as string/mixed types
+        reference_plate = sorted(reference_plate, key=lambda x: str(x))
+    else:
+        reference_plate = sorted(reference_plate)
+    reference_plate = reference_plate[0]
+
+    conversion_factors = {}
+    conversion_factors[reference_plate] = 1.0  # baseline, exp(0)
+    for term, coef in plate_effects.items():
+        plate_number = term.replace('C(Plate)[T.', '').replace(']', '')
+        # Compute exp(effect) for multiplicative conversion factor
+        conversion_factors[plate_number] = np.exp(coef)
+
+    # Build and display conversion factor DataFrame
+    conv_factors_df = pd.DataFrame(
+        list(conversion_factors.items()),
+        columns=['Plate', 'conversion_factor']
+    )
+    print("Conversion factors for each plate (to equalize them):")
+    print(conv_factors_df)
+
+    return conv_factors_df, conversion_factors, m
+
+def plate_peptide_anova(selected_norm_peptides):
+    """
+    Fits a two-way ANOVA linear model to decompose variation in ratio measurements 
+    into contributions from plate and peptide effects.
+
+    The function:
+    - Receives a DataFrame containing pool sample log ratio measurements across plates and peptides.
+    - Renames columns to simplify references.
+    - Ensures that ratio values are numeric and drops rows with missing ratio, plate, or peptide.
+    - Fits a linear model (ordinary least squares) for: RatioLightToHeavy ~ Plate + Peptide,
+      treating Plate and Peptide as categorical variables.
+    - Prints the model summary and runs ANOVA to partition the sources of variance.
+    - Returns the fitted model and ANOVA results.
+
+    This helps to quantify how much systematic bias can be attributed to inter-plate differences,
+    and how much is due to inherent differences between peptides, which is crucial for designing 
+    effective normalization and correction strategies in quantitative proteomics.
+
+    Args:
+        selected_norm_peptides (pd.DataFrame): DataFrame with 
+            'characteristics[Plate]', 'Peptide Sequence', and 'RatioLightToHeavy' columns.
+
+    Returns:
+        model: The fitted statsmodels OLS linear model.
+        anova_res: The ANOVA decomposition results (as a DataFrame).
+    """
+    # 1. Make a clean copy with simple column names
+    df = selected_norm_peptides.rename(
+        columns={
+            'characteristics[Plate]': 'Plate',
+            'Peptide Sequence': 'Peptide',
+        }
+    ).copy()
+
+    # 2. Ensure numeric response and drop NAs
+    df['RatioLightToHeavy'] = pd.to_numeric(df['RatioLightToHeavy'], errors='coerce')
+    df = df.dropna(subset=['RatioLightToHeavy', 'Plate', 'Peptide'])
+
+    # 3. Two-way model: RatioLightToHeavy ~ Plate + Peptide
+    model = smf.ols('RatioLightToHeavy ~ C(Plate) + C(Peptide)', data=df).fit()
+    print(model.summary())
+
+    # 4. ANOVA to see contributions of Plate vs Peptide
+    anova_res = anova_lm(model, typ=2)
+    print(anova_res)
+
+    return model, anova_res
+
 
 def report_peptide_protein_summary(peptide_counts):
     """
@@ -432,9 +526,83 @@ def report_peptide_protein_summary(peptide_counts):
 
     return summary_dict
 
+def get_peptide_means(peptide_plate_stats):
+    """
+    Given a DataFrame of peptide_plate_stats (output of calculate_intra_plate_cv),
+    return a DataFrame of peptide_means with columns: 
+    ['Peptide Sequence', 'grand_mean', 'between_plate_sd', 'inter_plate_cv']
+    """
+    peptide_means = (
+        peptide_plate_stats.groupby('Peptide Sequence')['mean']
+        .agg(['mean', 'std'])
+        .rename(columns={'mean': 'grand_mean', 'std': 'between_plate_sd'})
+        .reset_index()
+    )
+    peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
+
+    return peptide_means.sort_values('inter_plate_cv').reset_index(drop=True)
+
+def get_peptides_below_cv_percentile(peptide_means, percentile):
+    """
+    Return a list of peptide sequences with inter-plate CV
+    at or below the specified percentile.
+    
+    Args:
+        peptide_means (pd.DataFrame): DataFrame with 'inter_plate_cv' and 'Peptide Sequence' columns.
+        percentile (float): Percentile threshold (between 0 and 100).
+        
+    Returns:
+        np.ndarray: Array of peptide sequences meeting the criterion.
+    """
+    cv_threshold = peptide_means['inter_plate_cv'].quantile(percentile / 100.0)
+    selected_peptides = peptide_means.loc[
+        peptide_means['inter_plate_cv'] <= cv_threshold,
+        'Peptide Sequence'
+    ].unique()
+    return selected_peptides
+
 # ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
+def plot_cumulative_peptide_count_by_cv(peptide_means):
+    """
+    Plot cumulative number of peptides as a function of sorted inter-plate CV.
+
+    Args:
+        peptide_means (pd.DataFrame): DataFrame with at least ['inter_plate_cv', 'Peptide Sequence'] columns.
+    """
+    import matplotlib.pyplot as plt
+
+    # Sort by inter-plate CV
+    cv_sorted = peptide_means[['inter_plate_cv', 'Peptide Sequence']].sort_values('inter_plate_cv').reset_index(drop=True)
+    cv_sorted['cumulative_count'] = range(1, len(cv_sorted) + 1)
+
+    # Print total number of peptides before reporting counts below thresholds
+    print(f"Total number of peptides: {len(cv_sorted)}")
+    # Print out how many peptides are below 10% and 20% inter-plate CV
+    for thresh in [0.10, 0.20]:
+        count_below = (cv_sorted['inter_plate_cv'] < thresh).sum()
+        print(f"Number of peptides with inter-plate CV < {int(thresh*100)}%: {count_below}")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(cv_sorted['inter_plate_cv'], cv_sorted['cumulative_count'], marker='o', linestyle='-')
+    plt.xlabel('Inter-Plate CV')
+    plt.ylabel('Cumulative Number of Peptides')
+    plt.title('Cumulative Peptide Count by Inter-Plate CV')
+
+    # Label every 10 percent of CV
+    for cv_mark in [0.1 * i for i in range(1, 11)]:
+        # Find the closest row where the CV >= cv_mark
+        mask = cv_sorted['inter_plate_cv'] >= cv_mark
+        if mask.any():
+            idx = mask.idxmax()
+            x = cv_sorted.at[idx, 'inter_plate_cv']
+            y = cv_sorted.at[idx, 'cumulative_count']
+            plt.axvline(x, color='gray', linestyle='--', linewidth=0.8)
+            plt.text(x, y, f"{int(y)} peptides\n{cv_mark:.1f} CV", va='bottom', ha='left', fontsize=9, color='blue')
+
+    plt.tight_layout()
+    plt.show()
 
 def plot_pool_boxplot(pool_df):
     """
@@ -596,4 +764,38 @@ def plot_peptide_counts(df: pd.DataFrame) -> None:
     sns.histplot(df['heavy_count'], bins=20, kde=True)
     plt.title("Distribution of Heavy Peptide Counts")
     plt.xlabel("Heavy Peptide Counts")
+    plt.show()
+
+def plot_inter_plate_cv_kde(peptide_plate_stats):
+    """
+    Plot a KDE of inter-plate CV for each peptide, with a vertical line at the median.
+    
+    Args:
+        peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
+            Must have columns ['Peptide Sequence', 'mean'] at a minimum.
+    Returns:
+        matplotlib.figure.Figure: The figure object containing the plot.
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    # Calculate group-by summary stats
+    peptide_means = (
+        peptide_plate_stats.groupby('Peptide Sequence')['mean']
+        .agg(['mean', 'std'])
+        .rename(columns={'mean': 'grand_mean', 'std': 'between_plate_sd'})
+        .reset_index()
+    )
+    # Calculate inter-plate CV per peptide
+    peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
+
+    # KDE plot of inter-plate CV with median vertical line
+    fig = plt.figure(figsize=(12, 6))
+    sns.kdeplot(peptide_means['inter_plate_cv'].dropna(), fill=True)
+    median_cv = peptide_means['inter_plate_cv'].median()
+    plt.axvline(median_cv, color='red', linestyle='--', label=f'Median = {median_cv:.2f}')
+    plt.title('KDE Plot of Inter-Plate CV Across Peptides')
+    plt.xlabel('Inter-Plate CV')
+    plt.ylabel('Density')
+    plt.legend()
     plt.show()
