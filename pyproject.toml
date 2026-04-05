@@ -8,13 +8,19 @@ version = "0.1.0"
 description = "Simple tools to clean up data from Skyline"
 readme = "README.md"
 requires-python = ">=3.10"
+authors = [
+    {name = "Thanadol Sutantiwanichkul", email = "khunkoei@gmail.com"},
+]
+license = {text = "MIT"}
 dependencies = [
     "requests",
     "pandas",
+    "numpy",
     "lxml",
-    "sdrf-pipelines[ontology]",
     "matplotlib",
     "seaborn",
+    "statsmodels",
+    "sdrf-pipelines[ontology]",
 ]
 
 [tool.setuptools.packages.find]
