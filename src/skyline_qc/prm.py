@@ -26,6 +26,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+import numpy as np
 
 
 # ---------------------------------------------------------------------------
@@ -408,21 +409,47 @@ def report_peptide_protein_summary(peptide_counts):
 
 def plot_heavy_light_scatter(peptide_counts):
     """
-    Scatter plot of heavy vs. light peptide counts for each peptide.
+    Scatter plot of heavy vs. light peptide counts for each peptide, 
+    colored by the density of peptides at each point. Highest density points are plotted on top.
 
     Args:
         peptide_counts (pd.DataFrame): DataFrame with columns 'Peptide', 'heavy_count', 'light_count'
     """
+
+
+    x = peptide_counts['heavy_count'].values
+    y = peptide_counts['light_count'].values
+
+    # Count occurrences for each (heavy_count, light_count)
+    xy = list(zip(x, y))
+    from collections import Counter
+    counts = Counter(xy)
+    point_count = np.array([counts[(hx, ly)] for hx, ly in xy])
+    # Sort so that points with highest 'point_count' are plotted last (on top)
+    sort_idx = np.argsort(point_count)
+    x_sorted = x[sort_idx]
+    y_sorted = y[sort_idx]
+    point_count_sorted = point_count[sort_idx]
+
     plt.figure(figsize=(8, 6))
-    plt.scatter(peptide_counts['heavy_count'], peptide_counts['light_count'], alpha=0.6)
+    sc = plt.scatter(
+        x_sorted, y_sorted,
+        c=point_count_sorted,
+        cmap='viridis',
+        alpha=0.7,
+        s=60,
+        edgecolors='k',
+        linewidth=0.5
+    )
     plt.xlabel("Heavy Count")
     plt.ylabel("Light Count")
-    plt.title("Scatter plot of Heavy vs. Light Peptide Counts")
-    plt.grid(True)
-    # Optionally draw y=x reference line
-    min_val = min(peptide_counts['heavy_count'].min(), peptide_counts['light_count'].min())
-    max_val = max(peptide_counts['heavy_count'].max(), peptide_counts['light_count'].max())
+    plt.title("Scatter plot of Heavy vs. Light Peptide Counts\n(colored by number of peptides at each point)")
+    # Reference y=x line
+    min_val = min(x.min(), y.min())
+    max_val = max(x.max(), y.max())
     plt.plot([min_val, max_val], [min_val, max_val], 'r--', lw=1)
+    plt.grid(True)
+    plt.colorbar(sc, label='# Peptides at Point')
     plt.tight_layout()
     plt.show()
 
