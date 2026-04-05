@@ -32,7 +32,271 @@ from statsmodels.stats.anova import anova_lm
 
 
 # ---------------------------------------------------------------------------
-# Coefficient of Variation
+# Quality Filtering
+# ---------------------------------------------------------------------------
+
+
+def filter_library_dot_product(
+    df: pd.DataFrame,
+    *,
+    threshold: float = 0.8,
+    col: str = "Library Dot Product",
+) -> pd.DataFrame:
+    """
+    Keep rows where library dot product is **strictly greater** than *threshold*.
+
+    Args:
+        df: Skyline report DataFrame.
+        threshold: Minimum Library Dot Product (exclusive below; rows with
+            value equal to *threshold* are removed). Default ``0.8``.
+        col: Column name for library dot product.
+
+    Raises:
+        KeyError: If *col* is missing from *df*.
+    """
+    if col not in df.columns:
+        raise KeyError(f"Column '{col}' not found in DataFrame.")
+
+    df = df.loc[df[col] > threshold].copy()
+    df = df[df['Normalized Area'].notna()]
+
+    pivot_df = df.pivot_table(
+        index=['Replicate', 'Protein Name', 'Peptide'],
+        columns='Isotope Label Type',
+        values='Normalized Area',
+        aggfunc='first').reset_index()
+    return pivot_df
+
+
+def filter_peptide_counts(peptide_counts_df: pd.DataFrame, light_cutoff: int = 700, heavy_cutoff: int = 700) -> pd.DataFrame:
+    """
+    Filter the peptide counts in the DataFrame.
+    """
+    peptide_counts_df = peptide_counts_df.loc[(peptide_counts_df['light_count'] > light_cutoff) & (peptide_counts_df['heavy_count'] > heavy_cutoff)]
+    return peptide_counts_df.reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Peptide Detection Summary
+# ---------------------------------------------------------------------------
+
+
+def summarise_peptide_counts(peptide_counts_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Summarise the peptide counts in the DataFrame.
+
+    Counts the number of non-missing heavy/light measurements per peptide.
+
+    Expects input DataFrame to have columns:
+      - 'Protein Name'
+      - 'Peptide'
+      - one column for heavy intensity (e.g., 'Heavy' or 'heavy'), and one for light (e.g., 'Light' or 'light').
+
+    Returns:
+        DataFrame with ['Protein Name', 'Peptide', 'heavy_count', 'light_count']
+    """
+    possible_heavy = [col for col in peptide_counts_df.columns if col.lower() == 'heavy']
+    possible_light = [col for col in peptide_counts_df.columns if col.lower() == 'light']
+
+    if not possible_heavy or not possible_light:
+        raise KeyError(
+            "Input DataFrame must contain columns 'Heavy' and 'Light' (case-insensitive)"
+        )
+    heavy_col = possible_heavy[0]
+    light_col = possible_light[0]
+
+    pept_sum = (
+        peptide_counts_df.groupby(['Protein Name', 'Peptide'])
+        .agg(
+            heavy_count=(heavy_col, lambda x: x.notna().sum()),
+            light_count=(light_col, lambda x: x.notna().sum()),
+        )
+        .reset_index()
+    )
+    return pept_sum
+
+
+def report_peptide_protein_summary(peptide_counts):
+    """
+    Report summary statistics on peptide and protein detection.
+
+    Args:
+        peptide_counts: DataFrame containing summarised peptide counts, must include 'Peptide', 'heavy_count', and 'light_count'.
+
+    Returns:
+        summary_dict: Dictionary with summary statistics.
+    """
+    expected_columns = ['Protein Name', 'Peptide', 'heavy_count', 'light_count']
+    if not all(col in peptide_counts.columns for col in expected_columns):
+        raise ValueError(f"Expected columns {expected_columns} not found in peptide_counts")
+
+    num_unique_peptides = peptide_counts['Peptide'].nunique()
+    num_unique_proteins = peptide_counts['Protein Name'].nunique()
+
+    summary_dict = {
+        'num_unique_peptides': num_unique_peptides,
+        'num_unique_proteins': num_unique_proteins,
+    }
+
+    print(f"Number of unique peptides: {num_unique_peptides}")
+    print(f"Number of unique proteins: {num_unique_proteins}")
+
+    return summary_dict
+
+
+# ---------------------------------------------------------------------------
+# CV Analysis
+# ---------------------------------------------------------------------------
+
+
+def calculate_intra_plate_cv(pool_data: pd.DataFrame, col_name: str = 'characteristics[Plate]') -> pd.DataFrame:
+    """
+    Calculate intra-plate CV per peptide grouped by the given column.
+
+    Args:
+        pool_data (pd.DataFrame): DataFrame containing at least [col_name, 'Peptide Sequence', 'RatioLightToHeavy'] columns.
+        col_name (str): The column name to group by (default: 'characteristics[Plate]').
+
+    Returns:
+        pd.DataFrame: DataFrame summarizing mean, std, and intra_plate_cv per group/peptide.
+    """
+    peptide_plate_stats = (
+        pool_data.groupby([col_name, 'Peptide Sequence'])['RatioLightToHeavy']
+        .agg(['mean', 'std'])
+        .reset_index()
+    )
+    peptide_plate_stats['intra_plate_cv'] = peptide_plate_stats['std'] / peptide_plate_stats['mean']
+    return peptide_plate_stats
+
+
+def get_peptide_means(peptide_plate_stats):
+    """
+    Given a DataFrame of peptide_plate_stats (output of calculate_intra_plate_cv),
+    return a DataFrame of peptide_means with columns:
+    ['Peptide Sequence', 'grand_mean', 'between_plate_sd', 'inter_plate_cv']
+    """
+    peptide_means = (
+        peptide_plate_stats.groupby('Peptide Sequence')['mean']
+        .agg(['mean', 'std'])
+        .rename(columns={'mean': 'grand_mean', 'std': 'between_plate_sd'})
+        .reset_index()
+    )
+    peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
+
+    return peptide_means.sort_values('inter_plate_cv').reset_index(drop=True)
+
+
+def get_peptides_below_cv_percentile(peptide_means, percentile):
+    """
+    Return a list of peptide sequences with inter-plate CV
+    at or below the specified percentile.
+
+    Args:
+        peptide_means (pd.DataFrame): DataFrame with 'inter_plate_cv' and 'Peptide Sequence' columns.
+        percentile (float): Percentile threshold (between 0 and 100).
+
+    Returns:
+        np.ndarray: Array of peptide sequences meeting the criterion.
+    """
+    cv_threshold = peptide_means['inter_plate_cv'].quantile(percentile / 100.0)
+    selected_peptides = peptide_means.loc[
+        peptide_means['inter_plate_cv'] <= cv_threshold,
+        'Peptide Sequence'
+    ].unique()
+    return selected_peptides
+
+
+# ---------------------------------------------------------------------------
+# Plate Normalization
+# ---------------------------------------------------------------------------
+
+
+def plate_peptide_anova(selected_norm_peptides):
+    """
+    Fits a two-way ANOVA linear model to decompose variation in ratio measurements
+    into contributions from plate and peptide effects.
+
+    The function:
+    - Receives a DataFrame containing pool sample log ratio measurements across plates and peptides.
+    - Renames columns to simplify references.
+    - Ensures that ratio values are numeric and drops rows with missing ratio, plate, or peptide.
+    - Fits a linear model (ordinary least squares) for: RatioLightToHeavy ~ Plate + Peptide,
+      treating Plate and Peptide as categorical variables.
+    - Prints the model summary and runs ANOVA to partition the sources of variance.
+    - Returns the fitted model and ANOVA results.
+
+    This helps to quantify how much systematic bias can be attributed to inter-plate differences,
+    and how much is due to inherent differences between peptides, which is crucial for designing
+    effective normalization and correction strategies in quantitative proteomics.
+
+    Args:
+        selected_norm_peptides (pd.DataFrame): DataFrame with
+            'characteristics[Plate]', 'Peptide Sequence', and 'RatioLightToHeavy' columns.
+
+    Returns:
+        model: The fitted statsmodels OLS linear model.
+        anova_res: The ANOVA decomposition results (as a DataFrame).
+    """
+    df = selected_norm_peptides.rename(
+        columns={
+            'characteristics[Plate]': 'Plate',
+            'Peptide Sequence': 'Peptide',
+        }
+    ).copy()
+
+    df['RatioLightToHeavy'] = pd.to_numeric(df['RatioLightToHeavy'], errors='coerce')
+    df = df.dropna(subset=['RatioLightToHeavy', 'Plate', 'Peptide'])
+
+    model = smf.ols('RatioLightToHeavy ~ C(Plate) + C(Peptide)', data=df).fit()
+    print(model.summary())
+
+    anova_res = anova_lm(model, typ=2)
+    print(anova_res)
+
+    return model, anova_res
+
+
+def get_plate_conversion_factors(df):
+    """
+    Fit a model: log_ratio ~ C(Plate) to extract plate conversion factors.
+    This gives the correction (as multiplicative factor) for each plate to equalize across plates.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing at least 'log_ratio' and 'Plate' columns.
+
+    Returns:
+        conv_factors_df (pd.DataFrame): DataFrame with columns ['Plate', 'conversion_factor'].
+        conversion_factors (dict): Dictionary mapping Plate value to its conversion factor.
+        model (statsmodels.regression.linear_model.RegressionResultsWrapper): The fitted model.
+    """
+    m = smf.ols('log_ratio ~ C(Plate)', data=df).fit()
+
+    plate_effects = m.params.filter(like='C(Plate)')
+    reference_plate = df['Plate'].unique()
+    if isinstance(df['Plate'].iloc[0], str):
+        reference_plate = sorted(reference_plate, key=lambda x: str(x))
+    else:
+        reference_plate = sorted(reference_plate)
+    reference_plate = reference_plate[0]
+
+    conversion_factors = {}
+    conversion_factors[reference_plate] = 1.0
+    for term, coef in plate_effects.items():
+        plate_number = term.replace('C(Plate)[T.', '').replace(']', '')
+        conversion_factors[plate_number] = np.exp(coef)
+
+    conv_factors_df = pd.DataFrame(
+        list(conversion_factors.items()),
+        columns=['Plate', 'conversion_factor']
+    )
+    print("Conversion factors for each plate (to equalize them):")
+    print(conv_factors_df)
+
+    return conv_factors_df, conversion_factors, m
+
+
+# ---------------------------------------------------------------------------
+# General QC
 # ---------------------------------------------------------------------------
 
 
@@ -75,11 +339,6 @@ def compute_cv(
     )
     result["cv_pct"] = (result["std"] / result["mean"]).abs() * 100
     return result.sort_values("cv_pct").reset_index(drop=True)
-
-
-# ---------------------------------------------------------------------------
-# Missing-value / detection summary
-# ---------------------------------------------------------------------------
 
 
 def flag_missing_values(
@@ -136,11 +395,6 @@ def flag_missing_values(
     return pivot.reset_index().sort_values("detection_rate").reset_index(drop=True)
 
 
-# ---------------------------------------------------------------------------
-# Dot-product quality summary
-# ---------------------------------------------------------------------------
-
-
 def dot_product_summary(
     df: pd.DataFrame,
     lib_dot_col: str = "Library Dot Product",
@@ -191,11 +445,6 @@ def dot_product_summary(
     return result.reset_index(drop=True)
 
 
-# ---------------------------------------------------------------------------
-# Retention-time deviation
-# ---------------------------------------------------------------------------
-
-
 def retention_time_deviation(
     df: pd.DataFrame,
     observed_col: str = "Peptide Retention Time",
@@ -240,11 +489,6 @@ def retention_time_deviation(
     result["rt_dev"] = (result["rt_observed"] - result["rt_predicted"]).round(6)
     result["abs_rt_dev"] = result["rt_dev"].abs()
     return result.sort_values("abs_rt_dev", ascending=False).reset_index(drop=True)
-
-
-# ---------------------------------------------------------------------------
-# High-level summary
-# ---------------------------------------------------------------------------
 
 
 def summarize_prm(
@@ -321,290 +565,73 @@ def summarize_prm(
 
 
 # ---------------------------------------------------------------------------
-# Filtering
-# ---------------------------------------------------------------------------
-
-
-def filter_library_dot_product(
-    df: pd.DataFrame,
-    *,
-    threshold: float = 0.8,
-    col: str = "Library Dot Product",
-) -> pd.DataFrame:
-    """
-    Keep rows where library dot product is **strictly greater** than *threshold*.
-
-    Args:
-        df: Skyline report DataFrame.
-        threshold: Minimum Library Dot Product (exclusive below; rows with
-            value equal to *threshold* are removed). Default ``0.8``.
-        col: Column name for library dot product.
-
-    Raises:
-        KeyError: If *col* is missing from *df*.
-    """
-    if col not in df.columns:
-        raise KeyError(f"Column '{col}' not found in DataFrame.")
-    
-    df = df.loc[df[col] > threshold].copy()
-    df = df[df['Normalized Area'].notna()]
-
-    pivot_df = df.pivot_table(
-        index=['Replicate', 'Protein Name', 'Peptide'],   
-        columns='Isotope Label Type',
-        values='Normalized Area',
-        aggfunc='first').reset_index()
-    return pivot_df 
-
-def filter_peptide_counts(peptide_counts_df: pd.DataFrame, light_cutoff: int = 700, heavy_cutoff: int = 700) -> pd.DataFrame:
-    """
-    Filter the peptide counts in the DataFrame.
-    """
-    
-    # Filter the peptide counts by the light and heavy cutoffs and return the filtered DataFrame
-    peptide_counts_df = peptide_counts_df.loc[(peptide_counts_df['light_count'] > light_cutoff) & (peptide_counts_df['heavy_count'] > heavy_cutoff)]
-    return peptide_counts_df.reset_index(drop=True)
-
-
-def summarise_peptide_counts(peptide_counts_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Summarise the peptide counts in the DataFrame.
-
-    Counts the number of non-missing heavy/light measurements per peptide.
-
-    Expects input DataFrame to have columns:
-      - 'Protein Name'
-      - 'Peptide'
-      - one column for heavy intensity (e.g., 'Heavy' or 'heavy'), and one for light (e.g., 'Light' or 'light').
-
-    Returns:
-        DataFrame with ['Protein Name', 'Peptide', 'heavy_count', 'light_count']
-    """
-    # Try to find commonly used heavy/light column names if possible
-    possible_heavy = [col for col in peptide_counts_df.columns if col.lower() == 'heavy']
-    possible_light = [col for col in peptide_counts_df.columns if col.lower() == 'light']
-
-    if not possible_heavy or not possible_light:
-        raise KeyError(
-            "Input DataFrame must contain columns 'Heavy' and 'Light' (case-insensitive)"
-        )
-    heavy_col = possible_heavy[0]
-    light_col = possible_light[0]
-
-    pept_sum = (
-        peptide_counts_df.groupby(['Protein Name', 'Peptide'])
-        .agg(
-            heavy_count=(heavy_col, lambda x: x.notna().sum()),
-            light_count=(light_col, lambda x: x.notna().sum()),
-        )
-        .reset_index()
-    )
-    return pept_sum
-
-
-def get_plate_conversion_factors(df):
-    """
-    Fit a model: log_ratio ~ C(Plate) to extract plate conversion factors.
-    This gives the correction (as multiplicative factor) for each plate to equalize across plates.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing at least 'log_ratio' and 'Plate' columns.
-
-    Returns:
-        conv_factors_df (pd.DataFrame): DataFrame with columns ['Plate', 'conversion_factor'].
-        conversion_factors (dict): Dictionary mapping Plate value to its conversion factor.
-        model (statsmodels.regression.linear_model.RegressionResultsWrapper): The fitted model.
-    """
-    # Fit OLS model
-    m = smf.ols('log_ratio ~ C(Plate)', data=df).fit()
-
-    # Extract coefficients and convert to multiplicative factors
-    plate_effects = m.params.filter(like='C(Plate)')
-    # The intercept represents the reference plate's mean log(ratio)
-    reference_plate = df['Plate'].unique()
-    if isinstance(df['Plate'].iloc[0], str):
-        # some columns come in as string/mixed types
-        reference_plate = sorted(reference_plate, key=lambda x: str(x))
-    else:
-        reference_plate = sorted(reference_plate)
-    reference_plate = reference_plate[0]
-
-    conversion_factors = {}
-    conversion_factors[reference_plate] = 1.0  # baseline, exp(0)
-    for term, coef in plate_effects.items():
-        plate_number = term.replace('C(Plate)[T.', '').replace(']', '')
-        # Compute exp(effect) for multiplicative conversion factor
-        conversion_factors[plate_number] = np.exp(coef)
-
-    # Build and display conversion factor DataFrame
-    conv_factors_df = pd.DataFrame(
-        list(conversion_factors.items()),
-        columns=['Plate', 'conversion_factor']
-    )
-    print("Conversion factors for each plate (to equalize them):")
-    print(conv_factors_df)
-
-    return conv_factors_df, conversion_factors, m
-
-def plate_peptide_anova(selected_norm_peptides):
-    """
-    Fits a two-way ANOVA linear model to decompose variation in ratio measurements 
-    into contributions from plate and peptide effects.
-
-    The function:
-    - Receives a DataFrame containing pool sample log ratio measurements across plates and peptides.
-    - Renames columns to simplify references.
-    - Ensures that ratio values are numeric and drops rows with missing ratio, plate, or peptide.
-    - Fits a linear model (ordinary least squares) for: RatioLightToHeavy ~ Plate + Peptide,
-      treating Plate and Peptide as categorical variables.
-    - Prints the model summary and runs ANOVA to partition the sources of variance.
-    - Returns the fitted model and ANOVA results.
-
-    This helps to quantify how much systematic bias can be attributed to inter-plate differences,
-    and how much is due to inherent differences between peptides, which is crucial for designing 
-    effective normalization and correction strategies in quantitative proteomics.
-
-    Args:
-        selected_norm_peptides (pd.DataFrame): DataFrame with 
-            'characteristics[Plate]', 'Peptide Sequence', and 'RatioLightToHeavy' columns.
-
-    Returns:
-        model: The fitted statsmodels OLS linear model.
-        anova_res: The ANOVA decomposition results (as a DataFrame).
-    """
-    # 1. Make a clean copy with simple column names
-    df = selected_norm_peptides.rename(
-        columns={
-            'characteristics[Plate]': 'Plate',
-            'Peptide Sequence': 'Peptide',
-        }
-    ).copy()
-
-    # 2. Ensure numeric response and drop NAs
-    df['RatioLightToHeavy'] = pd.to_numeric(df['RatioLightToHeavy'], errors='coerce')
-    df = df.dropna(subset=['RatioLightToHeavy', 'Plate', 'Peptide'])
-
-    # 3. Two-way model: RatioLightToHeavy ~ Plate + Peptide
-    model = smf.ols('RatioLightToHeavy ~ C(Plate) + C(Peptide)', data=df).fit()
-    print(model.summary())
-
-    # 4. ANOVA to see contributions of Plate vs Peptide
-    anova_res = anova_lm(model, typ=2)
-    print(anova_res)
-
-    return model, anova_res
-
-
-def report_peptide_protein_summary(peptide_counts):
-    """
-    Report summary statistics on peptide and protein detection.
-
-    Args:
-        skyline_data: DataFrame containing raw skyline data.
-        peptide_counts: DataFrame containing summarised peptide counts, must include 'Peptide', 'heavy_count', and 'light_count'.
-
-    Returns:
-        summary_dict: Dictionary with summary statistics.
-    """
-    # Count the number of unique peptides and proteins in the data
-    expected_columns = ['Protein Name', 'Peptide', 'heavy_count', 'light_count']
-    if not all(col in peptide_counts.columns for col in expected_columns):
-        raise ValueError(f"Expected columns {expected_columns} not found in peptide_counts")
-
-    # For peptide_counts, Protein Name may be missing, so map peptide->protein using skyline_data
-    num_unique_peptides = peptide_counts['Peptide'].nunique()
-    num_unique_proteins = peptide_counts['Protein Name'].nunique()
-
-    summary_dict = {
-        'num_unique_peptides': num_unique_peptides,
-        'num_unique_proteins': num_unique_proteins,
-    }
-
-    print(f"Number of unique peptides: {num_unique_peptides}")
-    print(f"Number of unique proteins: {num_unique_proteins}")
-
-    return summary_dict
-
-
-def get_peptide_means(peptide_plate_stats):
-    """
-    Given a DataFrame of peptide_plate_stats (output of calculate_intra_plate_cv),
-    return a DataFrame of peptide_means with columns: 
-    ['Peptide Sequence', 'grand_mean', 'between_plate_sd', 'inter_plate_cv']
-    """
-    peptide_means = (
-        peptide_plate_stats.groupby('Peptide Sequence')['mean']
-        .agg(['mean', 'std'])
-        .rename(columns={'mean': 'grand_mean', 'std': 'between_plate_sd'})
-        .reset_index()
-    )
-    peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
-
-    return peptide_means.sort_values('inter_plate_cv').reset_index(drop=True)
-
-
-def get_peptides_below_cv_percentile(peptide_means, percentile):
-    """
-    Return a list of peptide sequences with inter-plate CV
-    at or below the specified percentile.
-    
-    Args:
-        peptide_means (pd.DataFrame): DataFrame with 'inter_plate_cv' and 'Peptide Sequence' columns.
-        percentile (float): Percentile threshold (between 0 and 100).
-        
-    Returns:
-        np.ndarray: Array of peptide sequences meeting the criterion.
-    """
-    cv_threshold = peptide_means['inter_plate_cv'].quantile(percentile / 100.0)
-    selected_peptides = peptide_means.loc[
-        peptide_means['inter_plate_cv'] <= cv_threshold,
-        'Peptide Sequence'
-    ].unique()
-    return selected_peptides
-
-
-# ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
 
 
-def plot_cumulative_peptide_count_by_cv(peptide_means):
+def plot_library_dot_product_distribution(df: pd.DataFrame) -> None:
+    """Histogram (+ KDE) of ``Library Dot Product``."""
+    col = "Library Dot Product"
+    if col not in df.columns:
+        raise KeyError(f"Column '{col}' not found in DataFrame.")
+    plt.figure(figsize=(10, 6))
+    sns.histplot(df[col], bins=20, kde=True)
+    plt.title("Distribution of Library Dot Product")
+    plt.xlabel("Library Dot Product")
+    plt.show()
+
+
+def plot_heavy_light_scatter(peptide_counts):
     """
-    Plot cumulative number of peptides as a function of sorted inter-plate CV.
+    Scatter plot of heavy vs. light peptide counts for each peptide,
+    colored by the density of peptides at each point. Highest density points are plotted on top.
 
     Args:
-        peptide_means (pd.DataFrame): DataFrame with at least ['inter_plate_cv', 'Peptide Sequence'] columns.
+        peptide_counts (pd.DataFrame): DataFrame with columns 'Peptide', 'heavy_count', 'light_count'
     """
-    # Sort by inter-plate CV
-    cv_sorted = peptide_means[['inter_plate_cv', 'Peptide Sequence']].sort_values('inter_plate_cv').reset_index(drop=True)
-    cv_sorted['cumulative_count'] = range(1, len(cv_sorted) + 1)
+    x = peptide_counts['heavy_count'].values
+    y = peptide_counts['light_count'].values
 
-    # Print total number of peptides before reporting counts below thresholds
-    print(f"Total number of peptides: {len(cv_sorted)}")
-    # Print out how many peptides are below 10% and 20% inter-plate CV
-    for thresh in [0.10, 0.20]:
-        count_below = (cv_sorted['inter_plate_cv'] < thresh).sum()
-        print(f"Number of peptides with inter-plate CV < {int(thresh*100)}%: {count_below}")
+    xy = list(zip(x, y))
+    counts = Counter(xy)
+    point_count = np.array([counts[(hx, ly)] for hx, ly in xy])
+    sort_idx = np.argsort(point_count)
+    x_sorted = x[sort_idx]
+    y_sorted = y[sort_idx]
+    point_count_sorted = point_count[sort_idx]
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(cv_sorted['inter_plate_cv'], cv_sorted['cumulative_count'], marker='o', linestyle='-')
-    plt.xlabel('Inter-Plate CV')
-    plt.ylabel('Cumulative Number of Peptides')
-    plt.title('Cumulative Peptide Count by Inter-Plate CV')
-
-    # Label every 10 percent of CV
-    for cv_mark in [0.1 * i for i in range(1, 11)]:
-        # Find the closest row where the CV >= cv_mark
-        mask = cv_sorted['inter_plate_cv'] >= cv_mark
-        if mask.any():
-            idx = mask.idxmax()
-            x = cv_sorted.at[idx, 'inter_plate_cv']
-            y = cv_sorted.at[idx, 'cumulative_count']
-            plt.axvline(x, color='gray', linestyle='--', linewidth=0.8)
-            plt.text(x, y, f"{int(y)} peptides\n{cv_mark:.1f} CV", va='bottom', ha='left', fontsize=9, color='blue')
-
+    plt.figure(figsize=(8, 6))
+    sc = plt.scatter(
+        x_sorted, y_sorted,
+        c=point_count_sorted,
+        cmap='viridis',
+        alpha=0.7,
+        s=60,
+        edgecolors='k',
+        linewidth=0.5
+    )
+    plt.xlabel("Heavy Count")
+    plt.ylabel("Light Count")
+    plt.title("Scatter plot of Heavy vs. Light Peptide Counts\n(colored by number of peptides at each point)")
+    min_val = min(x.min(), y.min())
+    max_val = max(x.max(), y.max())
+    plt.plot([min_val, max_val], [min_val, max_val], 'r--', lw=1)
+    plt.grid(True)
+    plt.colorbar(sc, label='# Peptides at Point')
     plt.tight_layout()
     plt.show()
+
+
+def plot_peptide_counts(df: pd.DataFrame) -> None:
+    """
+    Plot the peptide counts in the DataFrame.
+    """
+    plt.figure(figsize=(10, 6))
+    sns.histplot(df['heavy_count'], bins=20, kde=True)
+    plt.title("Distribution of Heavy Peptide Counts")
+    plt.xlabel("Heavy Peptide Counts")
+    plt.show()
+
 
 def plot_pool_boxplot(pool_df):
     """
@@ -624,47 +651,11 @@ def plot_pool_boxplot(pool_df):
     plt.xlabel('')
     plt.ylabel('log(RatioLightToHeavy)')
     plt.yscale('log')
-    plt.xticks([], [])  # Remove x tick labels and marks
+    plt.xticks([], [])
     plt.legend(title='Plate', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.show()
 
-def calculate_intra_plate_cv(pool_data: pd.DataFrame, col_name: str = 'characteristics[Plate]') -> pd.DataFrame:
-    """
-    Calculate intra-plate CV per peptide grouped by the given column.
-
-    Args:
-        pool_data (pd.DataFrame): DataFrame containing at least [col_name, 'Peptide Sequence', 'RatioLightToHeavy'] columns.
-        col_name (str): The column name to group by (default: 'characteristics[Plate]').
-
-    Returns:
-        pd.DataFrame: DataFrame summarizing mean, std, and intra_plate_cv per group/peptide.
-    """
-    peptide_plate_stats = (
-        pool_data.groupby([col_name, 'Peptide Sequence'])['RatioLightToHeavy']
-        .agg(['mean', 'std'])
-        .reset_index()
-    )
-    peptide_plate_stats['intra_plate_cv'] = peptide_plate_stats['std'] / peptide_plate_stats['mean']
-    return peptide_plate_stats
-
-def plot_intra_plate_cv_stats(peptide_plate_stats: pd.DataFrame, col_name: str = 'characteristics[Plate]'):
-    """
-    Plot a boxplot of intra-plate CV per group/peptide from the given stats DataFrame.
-
-    Args:
-        peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
-        col_name (str): The group column used in the stats DataFrame.
-    """
-    # Show summary dataframe
-    display(peptide_plate_stats.head())
-
-    plt.figure(figsize=(10, 6))
-    sns.boxplot(x=col_name, y='intra_plate_cv', data=peptide_plate_stats)
-    plt.title('Boxplot of Intra Plate CV for Pool')
-    plt.xlabel(col_name.replace('characteristics[', '').replace(']', '').capitalize())
-    plt.ylabel('Intra Plate CV')
-    plt.show()
 
 def plot_pool_heatmap(pool_data):
     """
@@ -675,21 +666,16 @@ def plot_pool_heatmap(pool_data):
         pool_data (pd.DataFrame): DataFrame filtered for Pool samples, must have columns
                                   'Peptide Sequence', 'Replicate', 'RatioLightToHeavy'
     """
-    # Pivot the data: rows = peptide, columns = replicate, values = ratio
     pivot = pool_data.pivot(
         index='Peptide Sequence',
         columns='Replicate',
         values='RatioLightToHeavy'
     )
 
-    # Log-transform 
     heatmap_data = np.log(pivot)
 
-    # Sort columns and rows by mean (log) ratio
     col_order = heatmap_data.mean(axis=0).sort_values().index
     row_order = heatmap_data.mean(axis=1).sort_values().index
-
-    # Re-order
     heatmap_data = heatmap_data.loc[row_order, col_order]
 
     plt.figure(figsize=(10, 6))
@@ -697,96 +683,47 @@ def plot_pool_heatmap(pool_data):
     plt.title('Heatmap of log(RatioLightToHeavy) for Pool')
     plt.xlabel('')
     plt.ylabel('Peptide Sequence')
-    plt.xticks([], [])  # Remove x tick labels and marks
+    plt.xticks([], [])
     plt.show()
 
 
-def plot_heavy_light_scatter(peptide_counts):
+def plot_intra_plate_cv_stats(peptide_plate_stats: pd.DataFrame, col_name: str = 'characteristics[Plate]'):
     """
-    Scatter plot of heavy vs. light peptide counts for each peptide, 
-    colored by the density of peptides at each point. Highest density points are plotted on top.
+    Plot a boxplot of intra-plate CV per group/peptide from the given stats DataFrame.
 
     Args:
-        peptide_counts (pd.DataFrame): DataFrame with columns 'Peptide', 'heavy_count', 'light_count'
+        peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
+        col_name (str): The group column used in the stats DataFrame.
     """
+    display(peptide_plate_stats.head())
 
-
-    x = peptide_counts['heavy_count'].values
-    y = peptide_counts['light_count'].values
-
-    xy = list(zip(x, y))
-    counts = Counter(xy)
-    point_count = np.array([counts[(hx, ly)] for hx, ly in xy])
-    # Sort so that points with highest 'point_count' are plotted last (on top)
-    sort_idx = np.argsort(point_count)
-    x_sorted = x[sort_idx]
-    y_sorted = y[sort_idx]
-    point_count_sorted = point_count[sort_idx]
-
-    plt.figure(figsize=(8, 6))
-    sc = plt.scatter(
-        x_sorted, y_sorted,
-        c=point_count_sorted,
-        cmap='viridis',
-        alpha=0.7,
-        s=60,
-        edgecolors='k',
-        linewidth=0.5
-    )
-    plt.xlabel("Heavy Count")
-    plt.ylabel("Light Count")
-    plt.title("Scatter plot of Heavy vs. Light Peptide Counts\n(colored by number of peptides at each point)")
-    # Reference y=x line
-    min_val = min(x.min(), y.min())
-    max_val = max(x.max(), y.max())
-    plt.plot([min_val, max_val], [min_val, max_val], 'r--', lw=1)
-    plt.grid(True)
-    plt.colorbar(sc, label='# Peptides at Point')
-    plt.tight_layout()
-    plt.show()
-
-def plot_library_dot_product_distribution(df: pd.DataFrame) -> None:
-    """Histogram (+ KDE) of ``Library Dot Product``."""
-    col = "Library Dot Product"
-    if col not in df.columns:
-        raise KeyError(f"Column '{col}' not found in DataFrame.")
     plt.figure(figsize=(10, 6))
-    sns.histplot(df[col], bins=20, kde=True)
-    plt.title("Distribution of Library Dot Product")
-    plt.xlabel("Library Dot Product")
+    sns.boxplot(x=col_name, y='intra_plate_cv', data=peptide_plate_stats)
+    plt.title('Boxplot of Intra Plate CV for Pool')
+    plt.xlabel(col_name.replace('characteristics[', '').replace(']', '').capitalize())
+    plt.ylabel('Intra Plate CV')
     plt.show()
 
-def plot_peptide_counts(df: pd.DataFrame) -> None:
-    """
-    Plot the peptide counts in the DataFrame.
-    """
-    plt.figure(figsize=(10, 6))
-    sns.histplot(df['heavy_count'], bins=20, kde=True)
-    plt.title("Distribution of Heavy Peptide Counts")
-    plt.xlabel("Heavy Peptide Counts")
-    plt.show()
 
 def plot_inter_plate_cv_kde(peptide_plate_stats):
     """
     Plot a KDE of inter-plate CV for each peptide, with a vertical line at the median.
-    
+
     Args:
         peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
             Must have columns ['Peptide Sequence', 'mean'] at a minimum.
+
     Returns:
         matplotlib.figure.Figure: The figure object containing the plot.
     """
-    # Calculate group-by summary stats
     peptide_means = (
         peptide_plate_stats.groupby('Peptide Sequence')['mean']
         .agg(['mean', 'std'])
         .rename(columns={'mean': 'grand_mean', 'std': 'between_plate_sd'})
         .reset_index()
     )
-    # Calculate inter-plate CV per peptide
     peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
 
-    # KDE plot of inter-plate CV with median vertical line
     fig = plt.figure(figsize=(12, 6))
     sns.kdeplot(peptide_means['inter_plate_cv'].dropna(), fill=True)
     median_cv = peptide_means['inter_plate_cv'].median()
@@ -795,4 +732,39 @@ def plot_inter_plate_cv_kde(peptide_plate_stats):
     plt.xlabel('Inter-Plate CV')
     plt.ylabel('Density')
     plt.legend()
+    plt.show()
+    return fig
+
+
+def plot_cumulative_peptide_count_by_cv(peptide_means):
+    """
+    Plot cumulative number of peptides as a function of sorted inter-plate CV.
+
+    Args:
+        peptide_means (pd.DataFrame): DataFrame with at least ['inter_plate_cv', 'Peptide Sequence'] columns.
+    """
+    cv_sorted = peptide_means[['inter_plate_cv', 'Peptide Sequence']].sort_values('inter_plate_cv').reset_index(drop=True)
+    cv_sorted['cumulative_count'] = range(1, len(cv_sorted) + 1)
+
+    print(f"Total number of peptides: {len(cv_sorted)}")
+    for thresh in [0.10, 0.20]:
+        count_below = (cv_sorted['inter_plate_cv'] < thresh).sum()
+        print(f"Number of peptides with inter-plate CV < {int(thresh*100)}%: {count_below}")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(cv_sorted['inter_plate_cv'], cv_sorted['cumulative_count'], marker='o', linestyle='-')
+    plt.xlabel('Inter-Plate CV')
+    plt.ylabel('Cumulative Number of Peptides')
+    plt.title('Cumulative Peptide Count by Inter-Plate CV')
+
+    for cv_mark in [0.1 * i for i in range(1, 11)]:
+        mask = cv_sorted['inter_plate_cv'] >= cv_mark
+        if mask.any():
+            idx = mask.idxmax()
+            x = cv_sorted.at[idx, 'inter_plate_cv']
+            y = cv_sorted.at[idx, 'cumulative_count']
+            plt.axvline(x, color='gray', linestyle='--', linewidth=0.8)
+            plt.text(x, y, f"{int(y)} peptides\n{cv_mark:.1f} CV", va='bottom', ha='left', fontsize=9, color='blue')
+
+    plt.tight_layout()
     plt.show()
