@@ -17,16 +17,14 @@ and works with the following key columns:
 - ``Library Dot Product``     – spectral dot product against the reference library
 - ``Peptide Retention Time``  – observed retention time (minutes)
 - ``Predicted Retention Time``– iRT-predicted retention time (minutes)
+
+Plotting functions are in :mod:`skyline_qc.prm_plots`.
 """
 
 from __future__ import annotations
 
-from collections import Counter
-
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import statsmodels.formula.api as smf
 from statsmodels.stats.anova import anova_lm
 
@@ -216,19 +214,6 @@ def plate_peptide_anova(selected_norm_peptides):
     Fits a two-way ANOVA linear model to decompose variation in ratio measurements
     into contributions from plate and peptide effects.
 
-    The function:
-    - Receives a DataFrame containing pool sample log ratio measurements across plates and peptides.
-    - Renames columns to simplify references.
-    - Ensures that ratio values are numeric and drops rows with missing ratio, plate, or peptide.
-    - Fits a linear model (ordinary least squares) for: RatioLightToHeavy ~ Plate + Peptide,
-      treating Plate and Peptide as categorical variables.
-    - Prints the model summary and runs ANOVA to partition the sources of variance.
-    - Returns the fitted model and ANOVA results.
-
-    This helps to quantify how much systematic bias can be attributed to inter-plate differences,
-    and how much is due to inherent differences between peptides, which is crucial for designing
-    effective normalization and correction strategies in quantitative proteomics.
-
     Args:
         selected_norm_peptides (pd.DataFrame): DataFrame with
             'characteristics[Plate]', 'Peptide Sequence', and 'RatioLightToHeavy' columns.
@@ -309,9 +294,6 @@ def compute_cv(
     Compute the percent coefficient of variation (%CV) for a numeric column,
     grouped by a categorical column (default: per precursor across replicates).
 
-    CV is calculated as ``(std / mean) * 100``.  Groups with fewer than two
-    non-null observations will have ``NaN`` in the CV column.
-
     Args:
         df: Skyline report DataFrame (from ``ImportFile.import_skyline_file``).
         value_col: Column to compute CV on. Defaults to ``'RatioLightToHeavy'``.
@@ -350,26 +332,15 @@ def flag_missing_values(
     """
     Identify precursors with missing quantification values across replicates.
 
-    A value is considered missing when it is ``NaN`` or zero.  The function
-    pivots the data into a precursor × replicate matrix and annotates each
-    precursor with its detection rate.
-
     Args:
         df: Skyline report DataFrame.
-        value_col: Column holding the quantitative values. Defaults to
-            ``'RatioLightToHeavy'``.
-        precursor_col: Column identifying precursors. Defaults to
-            ``'Precursor'``.
-        replicate_col: Column identifying replicates. Defaults to
-            ``'Replicate'``.
+        value_col: Column holding the quantitative values. Defaults to ``'RatioLightToHeavy'``.
+        precursor_col: Column identifying precursors. Defaults to ``'Precursor'``.
+        replicate_col: Column identifying replicates. Defaults to ``'Replicate'``.
 
     Returns:
-        pd.DataFrame with one row per precursor.  Columns include the
-        replicate-level values (wide format), plus:
-
-        - ``n_detected``     – number of replicates with a non-missing value
-        - ``n_total``        – total number of replicates
-        - ``detection_rate`` – fraction of replicates detected (0.0 – 1.0)
+        pd.DataFrame with one row per precursor, plus columns:
+        ``n_detected``, ``n_total``, ``detection_rate``.
 
     Raises:
         KeyError: If any of the required columns are absent from *df*.
@@ -406,29 +377,15 @@ def dot_product_summary(
     Summarise library and ratio dot-product scores per precursor and flag
     transitions that fall below quality thresholds.
 
-    Dot products range from 0 to 1; values below the threshold indicate poor
-    spectral similarity to the reference library or between light and heavy
-    channels.
-
     Args:
         df: Skyline report DataFrame.
-        lib_dot_col: Column for library dot product. Defaults to
-            ``'Library Dot Product'``.
-        ratio_dot_col: Column for ratio dot product. Defaults to
-            ``'Ratio Dot Product'``.
-        lib_threshold: Minimum acceptable library dot product. Defaults to
-            ``0.8``.
-        ratio_threshold: Minimum acceptable ratio dot product. Defaults to
-            ``0.8``.
+        lib_dot_col: Column for library dot product. Defaults to ``'Library Dot Product'``.
+        ratio_dot_col: Column for ratio dot product. Defaults to ``'Ratio Dot Product'``.
+        lib_threshold: Minimum acceptable library dot product. Defaults to ``0.8``.
+        ratio_threshold: Minimum acceptable ratio dot product. Defaults to ``0.8``.
 
     Returns:
-        pd.DataFrame with one row per (Precursor, Replicate) pair containing:
-
-        - ``Library Dot Product``     – original value
-        - ``Ratio Dot Product``       – original value
-        - ``lib_dot_pass``            – True if ≥ *lib_threshold*
-        - ``ratio_dot_pass``          – True if ≥ *ratio_threshold*
-        - ``both_pass``               – True if both dot products pass
+        pd.DataFrame with ``lib_dot_pass``, ``ratio_dot_pass``, ``both_pass`` columns.
 
     Raises:
         KeyError: If *lib_dot_col* or *ratio_dot_col* are not found in *df*.
@@ -454,26 +411,14 @@ def retention_time_deviation(
     Calculate the absolute and relative deviation between observed and
     predicted retention times for each precursor–replicate pair.
 
-    Large deviations may indicate co-elution interference, incorrect
-    peak-picking, or iRT calibration issues.
-
     Args:
         df: Skyline report DataFrame.
-        observed_col: Column with observed retention time. Defaults to
-            ``'Peptide Retention Time'``.
-        predicted_col: Column with predicted (iRT-based) retention time.
-            Defaults to ``'Predicted Retention Time'``.
+        observed_col: Column with observed retention time. Defaults to ``'Peptide Retention Time'``.
+        predicted_col: Column with predicted (iRT-based) retention time. Defaults to ``'Predicted Retention Time'``.
 
     Returns:
-        pd.DataFrame with one row per (Precursor, Replicate) pair, sorted by
-        ``abs_rt_dev`` descending, with columns:
-
-        - ``Precursor``    – precursor string
-        - ``Replicate``    – replicate label
-        - ``rt_observed``  – observed retention time (minutes)
-        - ``rt_predicted`` – predicted retention time (minutes)
-        - ``rt_dev``       – signed deviation (observed − predicted, minutes)
-        - ``abs_rt_dev``   – absolute deviation (minutes)
+        pd.DataFrame sorted by ``abs_rt_dev`` descending, with columns
+        ``rt_observed``, ``rt_predicted``, ``rt_dev``, ``abs_rt_dev``.
 
     Raises:
         KeyError: If *observed_col* or *predicted_col* are absent from *df*.
@@ -501,42 +446,19 @@ def summarize_prm(
     """
     Run all PRM quality checks and return a summary dictionary.
 
-    This is a convenience wrapper around :func:`compute_cv`,
-    :func:`flag_missing_values`, :func:`dot_product_summary`, and
-    :func:`retention_time_deviation`.
+    Convenience wrapper around :func:`compute_cv`, :func:`flag_missing_values`,
+    :func:`dot_product_summary`, and :func:`retention_time_deviation`.
 
     Args:
-        df: Skyline report DataFrame (from ``ImportFile.import_skyline_file``).
-        cv_col: Column used for CV calculation. Defaults to
-            ``'RatioLightToHeavy'``.
-        lib_threshold: Minimum acceptable library dot product. Defaults to
-            ``0.8``.
-        ratio_threshold: Minimum acceptable ratio dot product. Defaults to
-            ``0.8``.
-        rt_dev_threshold: Maximum acceptable absolute RT deviation in minutes.
-            Defaults to ``2.0``.
+        df: Skyline report DataFrame.
+        cv_col: Column used for CV calculation. Defaults to ``'RatioLightToHeavy'``.
+        lib_threshold: Minimum acceptable library dot product. Defaults to ``0.8``.
+        ratio_threshold: Minimum acceptable ratio dot product. Defaults to ``0.8``.
+        rt_dev_threshold: Maximum acceptable absolute RT deviation in minutes. Defaults to ``2.0``.
 
     Returns:
-        dict with the following keys:
-
-        - ``"cv"``               – DataFrame from :func:`compute_cv`
-        - ``"missing"``          – DataFrame from :func:`flag_missing_values`
-        - ``"dot_products"``     – DataFrame from :func:`dot_product_summary`
-        - ``"rt_deviation"``     – DataFrame from :func:`retention_time_deviation`
-        - ``"n_precursors"``     – total unique precursors
-        - ``"n_replicates"``     – total unique replicates
-        - ``"pct_dot_pass"``     – percentage of rows passing both dot-product thresholds
-        - ``"pct_rt_within"``    – percentage of rows within *rt_dev_threshold*
-        - ``"median_cv_pct"``    – median %CV across all precursors
-
-    Example::
-
-        from skyline_qc import ImportFile
-        from skyline_qc.prm import summarize_prm
-
-        df = ImportFile("results.csv").import_skyline_file()
-        report = summarize_prm(df)
-        print(report["median_cv_pct"])
+        dict with keys: ``cv``, ``missing``, ``dot_products``, ``rt_deviation``,
+        ``n_precursors``, ``n_replicates``, ``pct_dot_pass``, ``pct_rt_within``, ``median_cv_pct``.
     """
     cv_df = compute_cv(df, value_col=cv_col)
     missing_df = flag_missing_values(df)
@@ -562,209 +484,3 @@ def summarize_prm(
         "pct_rt_within": round(pct_rt_within, 2),
         "median_cv_pct": round(median_cv, 2),
     }
-
-
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
-
-
-def plot_library_dot_product_distribution(df: pd.DataFrame) -> None:
-    """Histogram (+ KDE) of ``Library Dot Product``."""
-    col = "Library Dot Product"
-    if col not in df.columns:
-        raise KeyError(f"Column '{col}' not found in DataFrame.")
-    plt.figure(figsize=(10, 6))
-    sns.histplot(df[col], bins=20, kde=True)
-    plt.title("Distribution of Library Dot Product")
-    plt.xlabel("Library Dot Product")
-    plt.show()
-
-
-def plot_heavy_light_scatter(peptide_counts):
-    """
-    Scatter plot of heavy vs. light peptide counts for each peptide,
-    colored by the density of peptides at each point. Highest density points are plotted on top.
-
-    Args:
-        peptide_counts (pd.DataFrame): DataFrame with columns 'Peptide', 'heavy_count', 'light_count'
-    """
-    x = peptide_counts['heavy_count'].values
-    y = peptide_counts['light_count'].values
-
-    xy = list(zip(x, y))
-    counts = Counter(xy)
-    point_count = np.array([counts[(hx, ly)] for hx, ly in xy])
-    sort_idx = np.argsort(point_count)
-    x_sorted = x[sort_idx]
-    y_sorted = y[sort_idx]
-    point_count_sorted = point_count[sort_idx]
-
-    plt.figure(figsize=(8, 6))
-    sc = plt.scatter(
-        x_sorted, y_sorted,
-        c=point_count_sorted,
-        cmap='viridis',
-        alpha=0.7,
-        s=60,
-        edgecolors='k',
-        linewidth=0.5
-    )
-    plt.xlabel("Heavy Count")
-    plt.ylabel("Light Count")
-    plt.title("Scatter plot of Heavy vs. Light Peptide Counts\n(colored by number of peptides at each point)")
-    min_val = min(x.min(), y.min())
-    max_val = max(x.max(), y.max())
-    plt.plot([min_val, max_val], [min_val, max_val], 'r--', lw=1)
-    plt.grid(True)
-    plt.colorbar(sc, label='# Peptides at Point')
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_peptide_counts(df: pd.DataFrame) -> None:
-    """
-    Plot the peptide counts in the DataFrame.
-    """
-    plt.figure(figsize=(10, 6))
-    sns.histplot(df['heavy_count'], bins=20, kde=True)
-    plt.title("Distribution of Heavy Peptide Counts")
-    plt.xlabel("Heavy Peptide Counts")
-    plt.show()
-
-
-def plot_pool_boxplot(pool_df):
-    """
-    Plot a boxplot of log(RatioLightToHeavy) by Replicate, colored by Plate.
-
-    Args:
-        pool_df (pd.DataFrame): DataFrame filtered to include only pool samples.
-                               Must have columns 'Replicate', 'RatioLightToHeavy', and 'characteristics[Plate]'.
-    """
-    sns.boxplot(
-        x='Replicate',
-        y='RatioLightToHeavy',
-        data=pool_df,
-        hue='characteristics[Plate]'
-    )
-    plt.title('Boxplot of log(RatioLightToHeavy) by Replicate (colored by Plate)')
-    plt.xlabel('')
-    plt.ylabel('log(RatioLightToHeavy)')
-    plt.yscale('log')
-    plt.xticks([], [])
-    plt.legend(title='Plate', bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_pool_heatmap(pool_data):
-    """
-    Plot a heatmap of log(RatioLightToHeavy) for Pool samples.
-    Peptides (rows) and Replicates (columns) are both ordered by their mean log-ratio.
-
-    Args:
-        pool_data (pd.DataFrame): DataFrame filtered for Pool samples, must have columns
-                                  'Peptide Sequence', 'Replicate', 'RatioLightToHeavy'
-    """
-    pivot = pool_data.pivot(
-        index='Peptide Sequence',
-        columns='Replicate',
-        values='RatioLightToHeavy'
-    )
-
-    heatmap_data = np.log(pivot)
-
-    col_order = heatmap_data.mean(axis=0).sort_values().index
-    row_order = heatmap_data.mean(axis=1).sort_values().index
-    heatmap_data = heatmap_data.loc[row_order, col_order]
-
-    plt.figure(figsize=(10, 6))
-    sns.heatmap(heatmap_data, cmap='viridis')
-    plt.title('Heatmap of log(RatioLightToHeavy) for Pool')
-    plt.xlabel('')
-    plt.ylabel('Peptide Sequence')
-    plt.xticks([], [])
-    plt.show()
-
-
-def plot_intra_plate_cv_stats(peptide_plate_stats: pd.DataFrame, col_name: str = 'characteristics[Plate]'):
-    """
-    Plot a boxplot of intra-plate CV per group/peptide from the given stats DataFrame.
-
-    Args:
-        peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
-        col_name (str): The group column used in the stats DataFrame.
-    """
-    display(peptide_plate_stats.head())
-
-    plt.figure(figsize=(10, 6))
-    sns.boxplot(x=col_name, y='intra_plate_cv', data=peptide_plate_stats)
-    plt.title('Boxplot of Intra Plate CV for Pool')
-    plt.xlabel(col_name.replace('characteristics[', '').replace(']', '').capitalize())
-    plt.ylabel('Intra Plate CV')
-    plt.show()
-
-
-def plot_inter_plate_cv_kde(peptide_plate_stats):
-    """
-    Plot a KDE of inter-plate CV for each peptide, with a vertical line at the median.
-
-    Args:
-        peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
-            Must have columns ['Peptide Sequence', 'mean'] at a minimum.
-
-    Returns:
-        matplotlib.figure.Figure: The figure object containing the plot.
-    """
-    peptide_means = (
-        peptide_plate_stats.groupby('Peptide Sequence')['mean']
-        .agg(['mean', 'std'])
-        .rename(columns={'mean': 'grand_mean', 'std': 'between_plate_sd'})
-        .reset_index()
-    )
-    peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
-
-    fig = plt.figure(figsize=(12, 6))
-    sns.kdeplot(peptide_means['inter_plate_cv'].dropna(), fill=True)
-    median_cv = peptide_means['inter_plate_cv'].median()
-    plt.axvline(median_cv, color='red', linestyle='--', label=f'Median = {median_cv:.2f}')
-    plt.title('KDE Plot of Inter-Plate CV Across Peptides')
-    plt.xlabel('Inter-Plate CV')
-    plt.ylabel('Density')
-    plt.legend()
-    plt.show()
-    return fig
-
-
-def plot_cumulative_peptide_count_by_cv(peptide_means):
-    """
-    Plot cumulative number of peptides as a function of sorted inter-plate CV.
-
-    Args:
-        peptide_means (pd.DataFrame): DataFrame with at least ['inter_plate_cv', 'Peptide Sequence'] columns.
-    """
-    cv_sorted = peptide_means[['inter_plate_cv', 'Peptide Sequence']].sort_values('inter_plate_cv').reset_index(drop=True)
-    cv_sorted['cumulative_count'] = range(1, len(cv_sorted) + 1)
-
-    print(f"Total number of peptides: {len(cv_sorted)}")
-    for thresh in [0.10, 0.20]:
-        count_below = (cv_sorted['inter_plate_cv'] < thresh).sum()
-        print(f"Number of peptides with inter-plate CV < {int(thresh*100)}%: {count_below}")
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(cv_sorted['inter_plate_cv'], cv_sorted['cumulative_count'], marker='o', linestyle='-')
-    plt.xlabel('Inter-Plate CV')
-    plt.ylabel('Cumulative Number of Peptides')
-    plt.title('Cumulative Peptide Count by Inter-Plate CV')
-
-    for cv_mark in [0.1 * i for i in range(1, 11)]:
-        mask = cv_sorted['inter_plate_cv'] >= cv_mark
-        if mask.any():
-            idx = mask.idxmax()
-            x = cv_sorted.at[idx, 'inter_plate_cv']
-            y = cv_sorted.at[idx, 'cumulative_count']
-            plt.axvline(x, color='gray', linestyle='--', linewidth=0.8)
-            plt.text(x, y, f"{int(y)} peptides\n{cv_mark:.1f} CV", va='bottom', ha='left', fontsize=9, color='blue')
-
-    plt.tight_layout()
-    plt.show()

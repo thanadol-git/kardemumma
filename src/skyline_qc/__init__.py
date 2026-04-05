@@ -1,24 +1,71 @@
 from .client import SkylineClient
-from .output_test import ImportFile, get_irt_peptides
+from .importer import ImportFile, CheckSkylineFile, get_irt_peptides
 from .sdrf import validate_sdrf
 from .prm import (
-    compute_cv,
-    dot_product_summary,
+    # Quality Filtering
     filter_library_dot_product,
+    filter_peptide_counts,
+    # Peptide Detection Summary
+    summarise_peptide_counts,
+    report_peptide_protein_summary,
+    # CV Analysis
+    calculate_intra_plate_cv,
+    get_peptide_means,
+    get_peptides_below_cv_percentile,
+    # Plate Normalization
+    plate_peptide_anova,
+    get_plate_conversion_factors,
+    # General QC
+    compute_cv,
     flag_missing_values,
+    dot_product_summary,
     retention_time_deviation,
     summarize_prm,
 )
+from .prm_plots import (
+    plot_library_dot_product_distribution,
+    plot_heavy_light_scatter,
+    plot_peptide_counts,
+    plot_pool_boxplot,
+    plot_pool_heatmap,
+    plot_intra_plate_cv_stats,
+    plot_inter_plate_cv_kde,
+    plot_cumulative_peptide_count_by_cv,
+)
 
 __all__ = [
+    # Core
     "SkylineClient",
     "ImportFile",
+    "CheckSkylineFile",
     "get_irt_peptides",
     "validate_sdrf",
+    # Quality Filtering
+    "filter_library_dot_product",
+    "filter_peptide_counts",
+    # Peptide Detection Summary
+    "summarise_peptide_counts",
+    "report_peptide_protein_summary",
+    # CV Analysis
+    "calculate_intra_plate_cv",
+    "get_peptide_means",
+    "get_peptides_below_cv_percentile",
+    # Plate Normalization
+    "plate_peptide_anova",
+    "get_plate_conversion_factors",
+    # General QC
     "compute_cv",
     "flag_missing_values",
     "dot_product_summary",
-    "filter_library_dot_product",
     "retention_time_deviation",
     "summarize_prm",
+    # Plotting
+    "plot_library_dot_product_distribution",
+    "plot_heavy_light_scatter",
+    "plot_peptide_counts",
+    "plot_pool_boxplot",
+    "plot_pool_heatmap",
+    "plot_intra_plate_cv_stats",
+    "plot_inter_plate_cv_kde",
+    "plot_cumulative_peptide_count_by_cv",
 ]
