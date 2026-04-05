@@ -432,6 +432,68 @@ def report_peptide_protein_summary(peptide_counts):
 
     return summary_dict
 
+# ---------------------------------------------------------------------------
+# Plotting
+# ---------------------------------------------------------------------------
+
+def plot_pool_boxplot(pool_df):
+    """
+    Plot a boxplot of log(RatioLightToHeavy) by Replicate, colored by Plate.
+
+    Args:
+        pool_df (pd.DataFrame): DataFrame filtered to include only pool samples.
+                               Must have columns 'Replicate', 'RatioLightToHeavy', and 'characteristics[Plate]'.
+    """
+    sns.boxplot(
+        x='Replicate',
+        y='RatioLightToHeavy',
+        data=pool_df,
+        hue='characteristics[Plate]'
+    )
+    plt.title('Boxplot of log(RatioLightToHeavy) by Replicate (colored by Plate)')
+    plt.xlabel('')
+    plt.ylabel('log(RatioLightToHeavy)')
+    plt.yscale('log')
+    plt.xticks([], [])  # Remove x tick labels and marks
+    plt.legend(title='Plate', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
+
+def plot_pool_heatmap(pool_data):
+    """
+    Plot a heatmap of log(RatioLightToHeavy) for Pool samples.
+    Peptides (rows) and Replicates (columns) are both ordered by their mean log-ratio.
+
+    Args:
+        pool_data (pd.DataFrame): DataFrame filtered for Pool samples, must have columns
+                                  'Peptide Sequence', 'Replicate', 'RatioLightToHeavy'
+    """
+    # Pivot the data: rows = peptide, columns = replicate, values = ratio
+    pivot = pool_data.pivot(
+        index='Peptide Sequence',
+        columns='Replicate',
+        values='RatioLightToHeavy'
+    )
+
+    # Log-transform 
+    heatmap_data = np.log(pivot)
+
+    # Sort columns and rows by mean (log) ratio
+    col_order = heatmap_data.mean(axis=0).sort_values().index
+    row_order = heatmap_data.mean(axis=1).sort_values().index
+
+    # Re-order
+    heatmap_data = heatmap_data.loc[row_order, col_order]
+
+    plt.figure(figsize=(10, 6))
+    sns.heatmap(heatmap_data, cmap='viridis')
+    plt.title('Heatmap of log(RatioLightToHeavy) for Pool')
+    plt.xlabel('')
+    plt.ylabel('Peptide Sequence')
+    plt.xticks([], [])  # Remove x tick labels and marks
+    plt.show()
+
+
 def plot_heavy_light_scatter(peptide_counts):
     """
     Scatter plot of heavy vs. light peptide counts for each peptide, 
@@ -477,11 +539,6 @@ def plot_heavy_light_scatter(peptide_counts):
     plt.colorbar(sc, label='# Peptides at Point')
     plt.tight_layout()
     plt.show()
-
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
-
 
 def plot_library_dot_product_distribution(df: pd.DataFrame) -> None:
     """Histogram (+ KDE) of ``Library Dot Product``."""
