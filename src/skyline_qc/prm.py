@@ -21,12 +21,12 @@ and works with the following key columns:
 
 from __future__ import annotations
 
-from typing import Optional
+from collections import Counter
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
-import numpy as np
 import statsmodels.formula.api as smf
 from statsmodels.stats.anova import anova_lm
 
@@ -347,12 +347,8 @@ def filter_library_dot_product(
         raise KeyError(f"Column '{col}' not found in DataFrame.")
     
     df = df.loc[df[col] > threshold].copy()
-
-    # Remove rows where 'Normalized Area' is NaN, matching ratio_picking.ipynb data cleaning
     df = df[df['Normalized Area'].notna()]
-    # prepare pivot table 
 
-    index_cols = [col for col in df.columns if col not in ['Isotope Label Type', 'Intensity']]  
     pivot_df = df.pivot_table(
         index=['Replicate', 'Protein Name', 'Peptide'],   
         columns='Isotope Label Type',
@@ -368,6 +364,7 @@ def filter_peptide_counts(peptide_counts_df: pd.DataFrame, light_cutoff: int = 7
     # Filter the peptide counts by the light and heavy cutoffs and return the filtered DataFrame
     peptide_counts_df = peptide_counts_df.loc[(peptide_counts_df['light_count'] > light_cutoff) & (peptide_counts_df['heavy_count'] > heavy_cutoff)]
     return peptide_counts_df.reset_index(drop=True)
+
 
 def summarise_peptide_counts(peptide_counts_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -403,6 +400,8 @@ def summarise_peptide_counts(peptide_counts_df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
     return pept_sum
+
+
 def get_plate_conversion_factors(df):
     """
     Fit a model: log_ratio ~ C(Plate) to extract plate conversion factors.
@@ -526,6 +525,7 @@ def report_peptide_protein_summary(peptide_counts):
 
     return summary_dict
 
+
 def get_peptide_means(peptide_plate_stats):
     """
     Given a DataFrame of peptide_plate_stats (output of calculate_intra_plate_cv),
@@ -541,6 +541,7 @@ def get_peptide_means(peptide_plate_stats):
     peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
 
     return peptide_means.sort_values('inter_plate_cv').reset_index(drop=True)
+
 
 def get_peptides_below_cv_percentile(peptide_means, percentile):
     """
@@ -561,9 +562,12 @@ def get_peptides_below_cv_percentile(peptide_means, percentile):
     ].unique()
     return selected_peptides
 
+
 # ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
+
+
 def plot_cumulative_peptide_count_by_cv(peptide_means):
     """
     Plot cumulative number of peptides as a function of sorted inter-plate CV.
@@ -571,8 +575,6 @@ def plot_cumulative_peptide_count_by_cv(peptide_means):
     Args:
         peptide_means (pd.DataFrame): DataFrame with at least ['inter_plate_cv', 'Peptide Sequence'] columns.
     """
-    import matplotlib.pyplot as plt
-
     # Sort by inter-plate CV
     cv_sorted = peptide_means[['inter_plate_cv', 'Peptide Sequence']].sort_values('inter_plate_cv').reset_index(drop=True)
     cv_sorted['cumulative_count'] = range(1, len(cv_sorted) + 1)
@@ -712,9 +714,7 @@ def plot_heavy_light_scatter(peptide_counts):
     x = peptide_counts['heavy_count'].values
     y = peptide_counts['light_count'].values
 
-    # Count occurrences for each (heavy_count, light_count)
     xy = list(zip(x, y))
-    from collections import Counter
     counts = Counter(xy)
     point_count = np.array([counts[(hx, ly)] for hx, ly in xy])
     # Sort so that points with highest 'point_count' are plotted last (on top)
@@ -776,9 +776,6 @@ def plot_inter_plate_cv_kde(peptide_plate_stats):
     Returns:
         matplotlib.figure.Figure: The figure object containing the plot.
     """
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
     # Calculate group-by summary stats
     peptide_means = (
         peptide_plate_stats.groupby('Peptide Sequence')['mean']
@@ -799,3 +796,4 @@ def plot_inter_plate_cv_kde(peptide_plate_stats):
     plt.ylabel('Density')
     plt.legend()
     plt.show()
+    return fig
