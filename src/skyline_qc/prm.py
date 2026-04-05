@@ -459,6 +459,43 @@ def plot_pool_boxplot(pool_df):
     plt.tight_layout()
     plt.show()
 
+def calculate_intra_plate_cv(pool_data: pd.DataFrame, col_name: str = 'characteristics[Plate]') -> pd.DataFrame:
+    """
+    Calculate intra-plate CV per peptide grouped by the given column.
+
+    Args:
+        pool_data (pd.DataFrame): DataFrame containing at least [col_name, 'Peptide Sequence', 'RatioLightToHeavy'] columns.
+        col_name (str): The column name to group by (default: 'characteristics[Plate]').
+
+    Returns:
+        pd.DataFrame: DataFrame summarizing mean, std, and intra_plate_cv per group/peptide.
+    """
+    peptide_plate_stats = (
+        pool_data.groupby([col_name, 'Peptide Sequence'])['RatioLightToHeavy']
+        .agg(['mean', 'std'])
+        .reset_index()
+    )
+    peptide_plate_stats['intra_plate_cv'] = peptide_plate_stats['std'] / peptide_plate_stats['mean']
+    return peptide_plate_stats
+
+def plot_intra_plate_cv_stats(peptide_plate_stats: pd.DataFrame, col_name: str = 'characteristics[Plate]'):
+    """
+    Plot a boxplot of intra-plate CV per group/peptide from the given stats DataFrame.
+
+    Args:
+        peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
+        col_name (str): The group column used in the stats DataFrame.
+    """
+    # Show summary dataframe
+    display(peptide_plate_stats.head())
+
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(x=col_name, y='intra_plate_cv', data=peptide_plate_stats)
+    plt.title('Boxplot of Intra Plate CV for Pool')
+    plt.xlabel(col_name.replace('characteristics[', '').replace(']', '').capitalize())
+    plt.ylabel('Intra Plate CV')
+    plt.show()
+
 def plot_pool_heatmap(pool_data):
     """
     Plot a heatmap of log(RatioLightToHeavy) for Pool samples.
