@@ -796,4 +796,3 @@ def plot_inter_plate_cv_kde(peptide_plate_stats):
     plt.ylabel('Density')
     plt.legend()
     plt.show()
-    return fig
