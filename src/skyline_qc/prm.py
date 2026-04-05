@@ -358,24 +358,49 @@ def filter_library_dot_product(
         aggfunc='first').reset_index()
     return pivot_df 
 
-def summarise_peptide_counts(df: pd.DataFrame) -> pd.DataFrame:
+def filter_peptide_counts(peptide_counts_df: pd.DataFrame, light_cutoff: int = 700, heavy_cutoff: int = 700) -> pd.DataFrame:
+    """
+    Filter the peptide counts in the DataFrame.
+    """
+    
+    # Filter the peptide counts by the light and heavy cutoffs and return the filtered DataFrame
+    peptide_counts_df = peptide_counts_df.loc[(peptide_counts_df['light_count'] > light_cutoff) & (peptide_counts_df['heavy_count'] > heavy_cutoff)]
+    return peptide_counts_df.reset_index(drop=True)
+
+def summarise_peptide_counts(peptide_counts_df: pd.DataFrame) -> pd.DataFrame:
     """
     Summarise the peptide counts in the DataFrame.
+
+    Counts the number of non-missing heavy/light measurements per peptide.
+
+    Expects input DataFrame to have columns:
+      - 'Protein Name'
+      - 'Peptide'
+      - one column for heavy intensity (e.g., 'Heavy' or 'heavy'), and one for light (e.g., 'Light' or 'light').
+
+    Returns:
+        DataFrame with ['Protein Name', 'Peptide', 'heavy_count', 'light_count']
     """
-    pept_sum = df.groupby(['Protein Name','Peptide']).agg(
-        heavy_count=pd.NamedAgg(column='heavy', aggfunc=lambda x: x.notna().sum()),
-        light_count=pd.NamedAgg(column='light', aggfunc=lambda x: x.notna().sum())
-    ).reset_index() 
+    # Try to find commonly used heavy/light column names if possible
+    possible_heavy = [col for col in peptide_counts_df.columns if col.lower() == 'heavy']
+    possible_light = [col for col in peptide_counts_df.columns if col.lower() == 'light']
 
-    # Sort by the sum of heavy and light counts
-    pept_sum = pept_sum.sort_values(
-        by=['heavy_count', 'light_count'],
-        ascending=[False, False]
-    ) # Fix the sum
+    if not possible_heavy or not possible_light:
+        raise KeyError(
+            "Input DataFrame must contain columns 'Heavy' and 'Light' (case-insensitive)"
+        )
+    heavy_col = possible_heavy[0]
+    light_col = possible_light[0]
 
-    
-
-    return pept_sum.reset_index(drop=True) 
+    pept_sum = (
+        peptide_counts_df.groupby(['Protein Name', 'Peptide'])
+        .agg(
+            heavy_count=(heavy_col, lambda x: x.notna().sum()),
+            light_count=(light_col, lambda x: x.notna().sum()),
+        )
+        .reset_index()
+    )
+    return pept_sum
 
 def report_peptide_protein_summary(peptide_counts):
     """
