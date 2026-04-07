@@ -395,6 +395,11 @@ class MergeFiles:
         # 2. Merge skyline_df with sdrf_df using 'Replicate' from skyline and 'comment[data file]' from sdrf_df
         skyline_merge = pd.merge(self.skyline_df, self.sdrf_df[['source name', 'characteristics[Sample]']], left_on='Replicate', right_on='source name', how='left')
 
-        # 3. Create column characteristics[Plate] from characteristics[Sample] (should be whatever comes after 'Plate_' in Replicate)
-        skyline_merge['characteristics[Plate]'] = skyline_merge['Replicate'].str.extract(r'Plate_(\d+)')
+        # 3. Plate id from Replicate (digits after "Plate_"). Use expand=False so this is
+        #    a scalar Series; str.extract(..., expand=True) returns a DataFrame and can
+        #    break statsmodels/patsy when used as a categorical column.
+        plate = skyline_merge["Replicate"].str.extract(r"Plate_(\d+)", expand=False)
+        if isinstance(plate, pd.DataFrame):
+            plate = plate.squeeze(axis=1)
+        skyline_merge["characteristics[Plate]"] = plate
         return skyline_merge
