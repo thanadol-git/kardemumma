@@ -19,9 +19,12 @@ from .prm import (
     calculate_intra_plate_cv,
     calculate_inter_plate_cv,
     get_peptides_below_cv_percentile,
+    extract_top_percentile,
     # Plate Normalization
     plate_peptide_anova,
+    fit_plate_logratio_model,
     get_plate_conversion_factors,
+    adjust_ratio_by_plate,
     # General QC
     compute_cv,
     flag_missing_values,
@@ -38,6 +41,7 @@ from .prm_plots import (
     plot_intra_plate_cv_stats,
     plot_inter_plate_cv_kde,
     plot_cumulative_peptide_count_by_cv,
+    plot_logratio_by_plate_boxplot,
 )
 
 __all__ = [
@@ -60,9 +64,12 @@ __all__ = [
     "calculate_intra_plate_cv",
     "calculate_inter_plate_cv",
     "get_peptides_below_cv_percentile",
+    "extract_top_percentile",
     # Plate Normalization
     "plate_peptide_anova",
+    "fit_plate_logratio_model",
     "get_plate_conversion_factors",
+    "adjust_ratio_by_plate",
     # General QC
     "compute_cv",
     "flag_missing_values",
@@ -78,4 +85,5 @@ __all__ = [
     "plot_intra_plate_cv_stats",
     "plot_inter_plate_cv_kde",
     "plot_cumulative_peptide_count_by_cv",
+    "plot_logratio_by_plate_boxplot",
 ]

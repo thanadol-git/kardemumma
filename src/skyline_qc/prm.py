@@ -307,158 +307,216 @@ def extract_top_percentile(df, column, percentile=0.1, id_col='Peptide Sequence'
 
 def plate_peptide_anova(
     selected_norm_peptides,
+    plate_col: str = "characteristics[Plate]",
     log_transform: bool = False,
 ):
     """
-    Fit a two-way ANOVA to assess plate and peptide effects on RatioLightToHeavy, or log-transformed ratio.
+    Fit a two-way ANOVA on ratio ~ plate + peptide.
 
     Args:
-        selected_norm_peptides (pd.DataFrame): Must contain columns for
-            'characteristics[Plate]' or 'Plate',
-            'Peptide Sequence' or 'Peptide',
-            and 'RatioLightToHeavy'.
-        log_transform (bool): If True, analyze log(RatioLightToHeavy) instead of RatioLightToHeavy.
+        selected_norm_peptides: DataFrame with ``RatioLightToHeavy`` and peptide / plate columns.
+        plate_col: Source column for plate (e.g. ``'characteristics[Plate]'`` or ``'Plate'``).
+            Renamed internally to ``Plate`` for the formula ``C(Plate)``.
+        log_transform: If True, model ``log(RatioLightToHeavy)`` (only rows with ratio > 0).
 
     Returns:
-        model: statsmodels OLS result
-        anova_res: ANOVA table (pd.DataFrame)
-        df: Cleaned DataFrame used in the model (with column 'response')
+        ``model``: statsmodels OLS result; ``anova_res``: Type II ANOVA table.
+
+    See :func:`get_plate_conversion_factors` for plate correction factors (e.g. on the
+    dataframe returned by :func:`fit_plate_logratio_model`).
     """
-    # Flexible column handling
-    df = selected_norm_peptides.copy()
-    if "characteristics[Plate]" in df.columns:
+    df = _formula_clean_frame(selected_norm_peptides.copy())
+
+    # Unify Plate column name
+    if plate_col in df.columns and plate_col != "Plate":
+        if "Plate" in df.columns:
+            df = df.drop(columns=["Plate"])
+        df = df.rename(columns={plate_col: "Plate"})
+    elif "characteristics[Plate]" in df.columns and "Plate" not in df.columns:
         df = df.rename(columns={"characteristics[Plate]": "Plate"})
-    if "Peptide Sequence" in df.columns:
+    elif "characteristics[Plate]" in df.columns and "Plate" in df.columns:
+        df = df.drop(columns=["characteristics[Plate]"])
+
+    # Unify Peptide column name
+    if "Peptide Sequence" in df.columns and "Peptide" not in df.columns:
         df = df.rename(columns={"Peptide Sequence": "Peptide"})
+    elif "Peptide Sequence" in df.columns and "Peptide" in df.columns:
+        df = df.drop(columns=["Peptide Sequence"])
 
-    # Only keep required cols
-    for c in ("Plate", "Peptide", "RatioLightToHeavy"):
-        if c not in df.columns:
-            raise KeyError(f"Missing column: {c}")
-    df = df[["Plate", "Peptide", "RatioLightToHeavy"]].copy()
+    df = _formula_clean_frame(df)
 
-    # Drop NaNs & ensure all values are strings for categoricals
-    df = df.dropna(subset=["Plate", "Peptide", "RatioLightToHeavy"])
+    missing = [c for c in ("RatioLightToHeavy", "Plate", "Peptide") if c not in df.columns]
+    if missing:
+        raise KeyError(
+            f"plate_peptide_anova missing columns {missing!r}. Have: {list(df.columns)!r}"
+        )
+
+    # Clean and recode columns
+    ratio = pd.to_numeric(
+        _patsy_scalar_categorical(_as_1d_series(df, "RatioLightToHeavy")),
+        errors="coerce",
+    )
+    plate = _patsy_scalar_categorical(_as_1d_series(df, "Plate"))
+    peptide = _patsy_scalar_categorical(_as_1d_series(df, "Peptide"))
+    df = pd.DataFrame(
+        {"RatioLightToHeavy": ratio, "Plate": plate, "Peptide": peptide}
+    ).dropna(subset=["RatioLightToHeavy", "Plate", "Peptide"]).reset_index(drop=True)
     df["Plate"] = df["Plate"].astype(str)
     df["Peptide"] = df["Peptide"].astype(str)
-    df["RatioLightToHeavy"] = pd.to_numeric(df["RatioLightToHeavy"], errors="coerce")
 
-    # Set response
+    if df.empty or df.shape[0] == 0:
+        raise ValueError(
+            "plate_peptide_anova: no rows left after dropping missing Plate/Peptide/ratio."
+        )
+
     if log_transform:
-        df = df[df["RatioLightToHeavy"] > 0]  # drop nonpositive ratios for log
-        df["response"] = np.log(df["RatioLightToHeavy"])
-        model_formula = "response ~ C(Plate) + C(Peptide)"
+        df = df.loc[df["RatioLightToHeavy"] > 0].copy().reset_index(drop=True)
+        if df.empty:
+            raise ValueError(
+                "plate_peptide_anova: no positive RatioLightToHeavy rows for log_transform."
+            )
+        df["log_ratio"] = np.log(df["RatioLightToHeavy"])
+        df["response"] = df["log_ratio"]
     else:
         df["response"] = df["RatioLightToHeavy"]
-        model_formula = "response ~ C(Plate) + C(Peptide)"
 
-    # Fit model
+    model_formula = "response ~ C(Plate) + C(Peptide)"
     model = smf.ols(model_formula, data=df).fit()
     anova_res = anova_lm(model, typ=2)
     print(model.summary())
     print(anova_res)
 
-    # Plate p-value printout (robust logic)
-    f_col = next((c for c in anova_res.columns if "PR" in c or "p" in c), None)
-    plate_row = next((i for i in anova_res.index if "plate" in str(i).lower()), None)
-    if f_col and plate_row:
-        plate_pval = anova_res.loc[plate_row, f_col]
-        print(f"Plate effect p-value: {plate_pval}")
-        if pd.isnull(plate_pval):
-            print("Warning: Plate effect p-value is NaN.")
-        elif plate_pval < 0.05:
-            print("Plate effect is significant. There is a significant effect of plate on the response.")
+    def _p_from_anova(label_substr: str):
+        rows = [i for i in anova_res.index if label_substr in str(i).lower()]
+        if not rows:
+            return None
+        pr_col = next(
+            (c for c in anova_res.columns if "PR" in c or c.startswith("P")),
+            None,
+        )
+        if pr_col is None:
+            return None
+        return anova_res.loc[rows[0], pr_col]
+
+    plate_p = _p_from_anova("plate")
+    peptide_p = _p_from_anova("peptide")
+
+    # Report p-values for factors
+    if plate_p is not None and pd.notna(plate_p):
+        print(f"Plate effect p-value (Type II ANOVA): {plate_p}")
+        if plate_p < 0.05:
+            print(
+                "Plate effect is significant. There is a significant effect of plate on the response. Suggesting batch correction"
+            )
         else:
-            print("Plate effect is not significant. There is no significant effect of plate on the response.")
+            print(
+                "Plate effect is not significant. There is no significant effect of plate on the response. No batch correction needed."
+            )
     else:
-        print("Plate effect p-value could not be determined.")
+        print("Plate effect p-value could not be read from the ANOVA table.")
 
-    return model, anova_res, df
+    if peptide_p is not None and pd.notna(peptide_p):
+        print(f"Peptide effect p-value (Type II ANOVA): {peptide_p}")
+        if peptide_p < 0.05:
+            print(
+                "Peptide effect is significant. There is a significant effect of peptide on the response."
+            )
+        else:
+            print(
+                "Peptide effect is not significant. There is no significant effect of peptide on the response."
+            )
+    else:
+        print("Peptide effect p-value could not be read from the ANOVA table.")
 
-def fit_plate_logratio_model(selected_norm_peptides):
+    # Calculate conversion factors
+    conv_factors_df, conversion_factors, _ = get_plate_conversion_factors(df, log_transform=log_transform)
+
+    return model, anova_res, conv_factors_df, conversion_factors
+
+
+
+
+def get_plate_conversion_factors(df, log_transform: bool = False):
     """
-    Fits a linear model log(RatioLightToHeavy) ~ Plate (Plate as categorical).
-    Returns the fitted model and the cleaned DataFrame (with Plate and log_ratio columns).
+    Fit ``log_ratio ~ C(Plate)`` and return multiplicative correction factors per plate.
+
+    The reference plate (first when sorted) has factor ``1.0``; others are ``exp(coef)``
+    from the one-way model on ``log_ratio``.
 
     Args:
-        selected_norm_peptides (pd.DataFrame): DataFrame containing at least 'characteristics[Plate]', 'Replicate', and 'RatioLightToHeavy'
-    
+        df: DataFrame with ``Plate`` and ``log_ratio``, or ``Plate`` and
+            ``RatioLightToHeavy`` (positive values used; log is taken for the fit).
+        log_transform: Reserved for API compatibility; correction is always defined
+            in log space (equivalent to multiplicative factors on the raw ratio).
+
     Returns:
-        model: statsmodels OLS fitted model
-        df: DataFrame with columns ['Plate', 'Replicate', 'RatioLightToHeavy', 'log_ratio', ...]
+        ``conv_factors_df``, ``conversion_factors`` dict (string plate keys), fitted model.
     """
-    # Ensure required columns exist
-    required_cols = ['characteristics[Plate]', 'RatioLightToHeavy', 'Replicate']
-    for col in required_cols:
-        if col not in selected_norm_peptides.columns:
-            raise ValueError(f"Missing required column: '{col}'")
+    _ = log_transform
+    work = _formula_clean_frame(df.copy())
+    if "characteristics[Plate]" in work.columns and "Plate" not in work.columns:
+        work = work.rename(columns={"characteristics[Plate]": "Plate"})
+    elif "characteristics[Plate]" in work.columns and "Plate" in work.columns:
+        work = work.drop(columns=["characteristics[Plate]"])
+    work = _formula_clean_frame(work)
 
-    df = selected_norm_peptides.rename(
-        columns={'characteristics[Plate]': 'Plate'}
-    ).copy()
+    if "Plate" not in work.columns:
+        raise ValueError(
+            f"get_plate_conversion_factors needs 'Plate' (or 'characteristics[Plate]'). "
+            f"Have: {list(work.columns)!r}"
+        )
 
-    # Ensure numeric RatioLightToHeavy
-    df['RatioLightToHeavy'] = pd.to_numeric(df['RatioLightToHeavy'], errors='coerce')
-    df = df.dropna(subset=['RatioLightToHeavy', 'Plate'])
+    plate = _patsy_scalar_categorical(_as_1d_series(work, "Plate")).astype(str)
 
-    # Create log_ratio column
-    df['log_ratio'] = np.log(df['RatioLightToHeavy'])
-
-    # Model: log(ratio) ~ Plate (as categorical)
-    m = smf.ols('log_ratio ~ C(Plate)', data=df).fit()
-
-    # print the verdict from the model
-    print(m.summary())
-    print(f"Plate effect p-value: {m.pvalues['C(Plate)']}")
-    if m.pvalues['C(Plate)'] < 0.05:
-        print("Plate effect is significant. There is a significant effect of plate on the ratio.")
+    if "log_ratio" in work.columns:
+        lr = pd.to_numeric(_as_1d_series(work, "log_ratio"), errors="coerce")
+        conv_df = pd.DataFrame({"Plate": plate, "log_ratio": lr})
+    elif "RatioLightToHeavy" in work.columns:
+        ratio = pd.to_numeric(
+            _patsy_scalar_categorical(_as_1d_series(work, "RatioLightToHeavy")),
+            errors="coerce",
+        )
+        conv_df = pd.DataFrame({"Plate": plate, "RatioLightToHeavy": ratio})
+        conv_df = conv_df.dropna(subset=["Plate", "RatioLightToHeavy"])
+        conv_df = conv_df.loc[conv_df["RatioLightToHeavy"] > 0].copy()
+        conv_df["log_ratio"] = np.log(conv_df["RatioLightToHeavy"])
+        conv_df = conv_df[["Plate", "log_ratio"]]
     else:
-        print("Plate effect is not significant. There is no significant effect of plate on the ratio.")
+        raise ValueError(
+            "get_plate_conversion_factors needs 'log_ratio' or 'RatioLightToHeavy'. "
+            f"Have: {list(work.columns)!r}"
+        )
 
-    return m, df
+    conv_df = conv_df.dropna(subset=["log_ratio", "Plate"]).reset_index(drop=True)
+
+    if conv_df.empty:
+        raise ValueError("get_plate_conversion_factors: no rows left after cleaning.")
+
+    m = smf.ols("log_ratio ~ C(Plate)", data=conv_df).fit()
+    plate_effects = m.params.filter(like="C(Plate)")
+    ref_plates = conv_df["Plate"].unique()
+    ref_plates = sorted(ref_plates, key=lambda x: str(x))
+    reference_plate = str(ref_plates[0])
+
+    conversion_factors: dict[str, float] = {reference_plate: 1.0}
+    for term, coef in plate_effects.items():
+        plate_name = str(term.replace("C(Plate)[T.", "").replace("]", ""))
+        conversion_factors[plate_name] = float(np.exp(coef))
+
+    conv_factors_df = pd.DataFrame(
+        list(conversion_factors.items()),
+        columns=["Plate", "conversion_factor"],
+    )
+    print("Conversion factors for each plate (to equalize them):")
+    print(conv_factors_df)
+
+    return conv_factors_df, conversion_factors, m
 
 
 # ---------------------------------------------------------------------------
 # Plate Normalization
 # ---------------------------------------------------------------------------
 
-def get_plate_conversion_factors(df):
-    """
-    Fit a model: log_ratio ~ C(Plate) to extract plate conversion factors.
-    This gives the correction (as multiplicative factor) for each plate to equalize across plates.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing at least 'log_ratio' and 'Plate' columns.
-
-    Returns:
-        conv_factors_df (pd.DataFrame): DataFrame with columns ['Plate', 'conversion_factor'].
-        conversion_factors (dict): Dictionary mapping Plate value to its conversion factor.
-        model (statsmodels.regression.linear_model.RegressionResultsWrapper): The fitted model.
-    """
-    m = smf.ols('log_ratio ~ C(Plate)', data=df).fit()
-
-    plate_effects = m.params.filter(like='C(Plate)')
-    reference_plate = df['Plate'].unique()
-    if isinstance(df['Plate'].iloc[0], str):
-        reference_plate = sorted(reference_plate, key=lambda x: str(x))
-    else:
-        reference_plate = sorted(reference_plate)
-    reference_plate = reference_plate[0]
-
-    conversion_factors = {}
-    conversion_factors[reference_plate] = 1.0
-    for term, coef in plate_effects.items():
-        plate_number = term.replace('C(Plate)[T.', '').replace(']', '')
-        conversion_factors[plate_number] = np.exp(coef)
-
-    conv_factors_df = pd.DataFrame(
-        list(conversion_factors.items()),
-        columns=['Plate', 'conversion_factor']
-    )
-    print("Conversion factors for each plate (to equalize them):")
-    print(conv_factors_df)
-
-    return conv_factors_df, conversion_factors, m
 
 def adjust_ratio_by_plate(df, conversion_factors):
     """
@@ -479,6 +537,8 @@ def adjust_ratio_by_plate(df, conversion_factors):
     df['RatioLightToHeavy_adj'] = [
         r / get_factor(p) for r, p in zip(df['RatioLightToHeavy'], df['Plate'])
     ]
+
+    # 
     return df
 
 # ---------------------------------------------------------------------------

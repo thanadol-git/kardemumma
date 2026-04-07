@@ -78,7 +78,7 @@ def plot_peptide_counts(df: pd.DataFrame) -> None:
     plt.show()
 
 
-def plot_pool_boxplot(pool_df):
+def plot_pool_boxplot(pool_df, col_ratio: str = 'RatioLightToHeavy', col_plate: str = 'characteristics[Plate]'):
     """
     Plot a boxplot of log(RatioLightToHeavy) by Replicate, colored by Plate.
 
@@ -86,21 +86,25 @@ def plot_pool_boxplot(pool_df):
         pool_df (pd.DataFrame): DataFrame filtered to include only pool samples.
                                Must have columns 'Replicate', 'RatioLightToHeavy', and 'characteristics[Plate]'.
     """
+
+    # Set size 12*8
+    plt.figure(figsize=(12, 8))
     sns.boxplot(
         x='Replicate',
-        y='RatioLightToHeavy',
+        y=col_ratio,
         data=pool_df,
-        hue='characteristics[Plate]'
+        hue=col_plate
     )
-    plt.title('Boxplot of log(RatioLightToHeavy) by Replicate (colored by Plate)')
-    plt.xlabel('')
-    plt.ylabel('log(RatioLightToHeavy)')
+    plt.title(f'Boxplot of {col_ratio} by {col_plate} (colored by {col_plate})')
+    plt.xlabel(col_plate)
+    plt.ylabel(col_ratio)
     plt.yscale('log')
-    plt.xticks([], [])
-    plt.legend(title='Plate', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
+    plt.legend(title=col_plate, bbox_to_anchor=(1.05, 1), loc='upper left')
+    # Remove x tick labels and marks
+    plt.xticks([], [])
     plt.show()
-
+    
 
 def plot_pool_heatmap(pool_data, aggfunc: str = "mean"):
     """
