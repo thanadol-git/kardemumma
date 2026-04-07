@@ -225,3 +225,26 @@ def plot_cumulative_peptide_count_by_cv(peptide_means):
 
     plt.tight_layout()
     plt.show()
+
+
+
+def plot_logratio_by_plate_boxplot(df):
+    """
+    Plots boxplots of log(RatioLightToHeavy) by Replicate, colored by Plate.
+
+    Args:
+        df (pd.DataFrame): DataFrame with columns ['Replicate', 'log_ratio', 'Plate']
+    """
+    # Sort dataframe by Plate for plotting (optional)
+    df_sorted = df.sort_values('Plate')
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(x='Replicate', y='log_ratio', data=df_sorted, hue='Plate', dodge=False)
+    plt.title('Boxplot of log(RatioLightToHeavy) by Replicate (colored by Plate)')
+    plt.xlabel('')
+    plt.ylabel('log(RatioLightToHeavy)')
+    plt.xticks([], [])  # Remove x tick labels and marks
+    plt.legend(title='Plate', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
+    return df_sorted
+

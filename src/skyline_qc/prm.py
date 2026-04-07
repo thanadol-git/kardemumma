@@ -277,83 +277,167 @@ def get_peptides_below_cv_percentile(peptide_means, percentile):
 # ---------------------------------------------------------------------------
 
 
-def plate_peptide_anova(selected_norm_peptides):
+
+def extract_top_percentile(df, column, percentile=0.1, id_col='Peptide Sequence', source_df=None, source_col=None):
     """
-    Fit a two-way ANOVA (RatioLightToHeavy ~ Plate + Peptide) to assess plate and peptide effects.
+    Extract unique IDs from `id_col` where values in `column` are at or below the given percentile,
+    and return both the ID list and filtered DataFrame from `source_df` (if provided).
 
     Args:
-        selected_norm_peptides (pd.DataFrame): Requires
-            ``RatioLightToHeavy`` and plate / peptide identifiers. Accepts
-            ``characteristics[Plate]`` and ``Peptide Sequence``, or ``Plate`` and ``Peptide``.
+        df (pd.DataFrame): DataFrame containing summary/statistics (e.g. interplate_cv).
+        column (str): Name of column to compute percentile threshold over (e.g. 'inter_plate_cv').
+        percentile (float): Fraction for percentile threshold (e.g. 0.1 for 10% lowest values).
+        id_col (str): Column in `df` whose unique values to extract (peptide identifier).
+        source_df (pd.DataFrame, optional): DataFrame to filter based on the returned ID list.
+        source_col (str, optional): Column of `source_df` to match IDs (default: id_col).
+
+    Returns:
+        tuple: (ID list, filtered DataFrame [if source_df given, else None])
+    """
+    threshold = df[column].quantile(percentile)
+    id_list = df[df[column] <= threshold][id_col].unique()
+    if source_df is not None:
+        if source_col is None:
+            source_col = id_col
+        filtered_df = source_df[source_df[source_col].isin(id_list)]
+        return id_list, filtered_df.reset_index(drop=True)
+    else:
+        return id_list, None
+        
+
+def plate_peptide_anova(
+    selected_norm_peptides,
+    log_transform: bool = False,
+):
+    """
+    Fit a two-way ANOVA to assess plate and peptide effects on RatioLightToHeavy, or log-transformed ratio.
+
+    Args:
+        selected_norm_peptides (pd.DataFrame): Must contain columns for
+            'characteristics[Plate]' or 'Plate',
+            'Peptide Sequence' or 'Peptide',
+            and 'RatioLightToHeavy'.
+        log_transform (bool): If True, analyze log(RatioLightToHeavy) instead of RatioLightToHeavy.
 
     Returns:
         model: statsmodels OLS result
-        anova_res: ANOVA table (DataFrame)
+        anova_res: ANOVA table (pd.DataFrame)
+        df: Cleaned DataFrame used in the model (with column 'response')
     """
-    df = _formula_clean_frame(selected_norm_peptides.copy())
-    rename_map: dict[str, str] = {}
-    if "characteristics[Plate]" in df.columns and "Plate" not in df.columns:
-        rename_map["characteristics[Plate]"] = "Plate"
-    elif "characteristics[Plate]" in df.columns and "Plate" in df.columns:
-        df = df.drop(columns=["characteristics[Plate]"])
-    if "Peptide Sequence" in df.columns and "Peptide" not in df.columns:
-        rename_map["Peptide Sequence"] = "Peptide"
-    elif "Peptide Sequence" in df.columns and "Peptide" in df.columns:
-        # Prefer explicit ``Peptide``; drop duplicate source column after rename collision
-        df = df.drop(columns=["Peptide Sequence"])
-    df = df.rename(columns=rename_map)
-    df = _formula_clean_frame(df)
+    # Flexible column handling
+    df = selected_norm_peptides.copy()
+    if "characteristics[Plate]" in df.columns:
+        df = df.rename(columns={"characteristics[Plate]": "Plate"})
+    if "Peptide Sequence" in df.columns:
+        df = df.rename(columns={"Peptide Sequence": "Peptide"})
 
-    missing = [
-        c
-        for c in ("RatioLightToHeavy", "Plate", "Peptide")
-        if c not in df.columns
-    ]
-    if missing:
-        raise KeyError(
-            f"plate_peptide_anova missing columns {missing!r}. "
-            f"Have: {list(df.columns)!r}"
-        )
+    # Only keep required cols
+    for c in ("Plate", "Peptide", "RatioLightToHeavy"):
+        if c not in df.columns:
+            raise KeyError(f"Missing column: {c}")
+    df = df[["Plate", "Peptide", "RatioLightToHeavy"]].copy()
 
-    ratio = pd.to_numeric(
-        _patsy_scalar_categorical(_as_1d_series(df, "RatioLightToHeavy")),
-        errors="coerce",
-    )
-    plate = _patsy_scalar_categorical(_as_1d_series(df, "Plate"))
-    peptide = _patsy_scalar_categorical(_as_1d_series(df, "Peptide"))
-    df = (
-        pd.DataFrame(
-            {"RatioLightToHeavy": ratio, "Plate": plate, "Peptide": peptide}
-        )
-        .dropna(subset=["RatioLightToHeavy", "Plate", "Peptide"])
-        .reset_index(drop=True)
-    )
-
+    # Drop NaNs & ensure all values are strings for categoricals
+    df = df.dropna(subset=["Plate", "Peptide", "RatioLightToHeavy"])
     df["Plate"] = df["Plate"].astype(str)
     df["Peptide"] = df["Peptide"].astype(str)
+    df["RatioLightToHeavy"] = pd.to_numeric(df["RatioLightToHeavy"], errors="coerce")
+
+    # Set response
+    if log_transform:
+        df = df[df["RatioLightToHeavy"] > 0]  # drop nonpositive ratios for log
+        df["response"] = np.log(df["RatioLightToHeavy"])
+        model_formula = "response ~ C(Plate) + C(Peptide)"
+    else:
+        df["response"] = df["RatioLightToHeavy"]
+        model_formula = "response ~ C(Plate) + C(Peptide)"
 
     # Fit model
-    model = smf.ols("RatioLightToHeavy ~ C(Plate) + C(Peptide)", data=df).fit()
+    model = smf.ols(model_formula, data=df).fit()
     anova_res = anova_lm(model, typ=2)
-
-    # Print summary and ANOVA table
     print(model.summary())
     print(anova_res)
 
-    # Report plate effect p-value if possible
-    f_col = [c for c in anova_res.columns if "PR" in c or "p" in c][0]
-    plate_row = [i for i in anova_res.index if "plate" in str(i).lower()]
-    if plate_row:
-        plate_p = anova_res.loc[plate_row[0], f_col]
-        print(f"Plate effect p-value: {plate_p}")
-        if pd.isnull(plate_p):
+    # Plate p-value printout (robust logic)
+    f_col = next((c for c in anova_res.columns if "PR" in c or "p" in c), None)
+    plate_row = next((i for i in anova_res.index if "plate" in str(i).lower()), None)
+    if f_col and plate_row:
+        plate_pval = anova_res.loc[plate_row, f_col]
+        print(f"Plate effect p-value: {plate_pval}")
+        if pd.isnull(plate_pval):
             print("Warning: Plate effect p-value is NaN.")
-        elif plate_p < 0.05:
-            print("Plate effect is significant. There is a significant effect of plate on the ratio.")
+        elif plate_pval < 0.05:
+            print("Plate effect is significant. There is a significant effect of plate on the response.")
         else:
-            print("Plate effect is not significant. There is no significant effect of plate on the ratio.")
-    return model, anova_res
+            print("Plate effect is not significant. There is no significant effect of plate on the response.")
+    else:
+        print("Plate effect p-value could not be determined.")
 
+    return model, anova_res, df
+
+def fit_plate_logratio_model(selected_norm_peptides):
+    """
+    Fits a linear model log(RatioLightToHeavy) ~ Plate (Plate as categorical).
+    Returns the fitted model and the cleaned DataFrame (with Plate and log_ratio columns).
+
+    Args:
+        selected_norm_peptides (pd.DataFrame): DataFrame containing at least 'characteristics[Plate]', 'Replicate', and 'RatioLightToHeavy'
+    
+    Returns:
+        model: statsmodels OLS fitted model
+        df: DataFrame with columns ['Plate', 'Replicate', 'RatioLightToHeavy', 'log_ratio', ...]
+    """
+    # Ensure required columns exist
+    required_cols = ['characteristics[Plate]', 'RatioLightToHeavy', 'Replicate']
+    for col in required_cols:
+        if col not in selected_norm_peptides.columns:
+            raise ValueError(f"Missing required column: '{col}'")
+
+    df = selected_norm_peptides.rename(
+        columns={'characteristics[Plate]': 'Plate'}
+    ).copy()
+
+    # Ensure numeric RatioLightToHeavy
+    df['RatioLightToHeavy'] = pd.to_numeric(df['RatioLightToHeavy'], errors='coerce')
+    df = df.dropna(subset=['RatioLightToHeavy', 'Plate'])
+
+    # Create log_ratio column
+    df['log_ratio'] = np.log(df['RatioLightToHeavy'])
+
+    # Model: log(ratio) ~ Plate (as categorical)
+    m = smf.ols('log_ratio ~ C(Plate)', data=df).fit()
+
+    # print the verdict from the model
+    print(m.summary())
+    print(f"Plate effect p-value: {m.pvalues['C(Plate)']}")
+    if m.pvalues['C(Plate)'] < 0.05:
+        print("Plate effect is significant. There is a significant effect of plate on the ratio.")
+    else:
+        print("Plate effect is not significant. There is no significant effect of plate on the ratio.")
+
+    return m, df
+
+
+
+def plot_logratio_by_plate_boxplot(df):
+    """
+    Plots boxplots of log(RatioLightToHeavy) by Replicate, colored by Plate.
+
+    Args:
+        df (pd.DataFrame): DataFrame with columns ['Replicate', 'log_ratio', 'Plate']
+    """
+    # Sort dataframe by Plate for plotting (optional)
+    df_sorted = df.sort_values('Plate')
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(x='Replicate', y='log_ratio', data=df_sorted, hue='Plate', dodge=False)
+    plt.title('Boxplot of log(RatioLightToHeavy) by Replicate (colored by Plate)')
+    plt.xlabel('')
+    plt.ylabel('log(RatioLightToHeavy)')
+    plt.xticks([], [])  # Remove x tick labels and marks
+    plt.legend(title='Plate', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
+    return df_sorted
 
 def get_plate_conversion_factors(df):
     """
