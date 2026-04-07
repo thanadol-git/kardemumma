@@ -303,7 +303,7 @@ def extract_top_percentile(df, column, percentile=0.1, id_col='Peptide Sequence'
         return id_list, filtered_df.reset_index(drop=True)
     else:
         return id_list, None
-        
+
 
 def plate_peptide_anova(
     selected_norm_peptides,
@@ -418,26 +418,9 @@ def fit_plate_logratio_model(selected_norm_peptides):
     return m, df
 
 
-
-def plot_logratio_by_plate_boxplot(df):
-    """
-    Plots boxplots of log(RatioLightToHeavy) by Replicate, colored by Plate.
-
-    Args:
-        df (pd.DataFrame): DataFrame with columns ['Replicate', 'log_ratio', 'Plate']
-    """
-    # Sort dataframe by Plate for plotting (optional)
-    df_sorted = df.sort_values('Plate')
-    plt.figure(figsize=(10, 6))
-    sns.boxplot(x='Replicate', y='log_ratio', data=df_sorted, hue='Plate', dodge=False)
-    plt.title('Boxplot of log(RatioLightToHeavy) by Replicate (colored by Plate)')
-    plt.xlabel('')
-    plt.ylabel('log(RatioLightToHeavy)')
-    plt.xticks([], [])  # Remove x tick labels and marks
-    plt.legend(title='Plate', bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.tight_layout()
-    plt.show()
-    return df_sorted
+# ---------------------------------------------------------------------------
+# Plate Normalization
+# ---------------------------------------------------------------------------
 
 def get_plate_conversion_factors(df):
     """
@@ -477,6 +460,26 @@ def get_plate_conversion_factors(df):
 
     return conv_factors_df, conversion_factors, m
 
+def adjust_ratio_by_plate(df, conversion_factors):
+    """
+    Normalize RatioLightToHeavy by dividing by the plate-specific conversion factor.
+
+    Args:
+        df (pd.DataFrame): DataFrame with columns 'RatioLightToHeavy' and 'Plate'.
+        conversion_factors (dict): Dict mapping plate (as str or int) to factor.
+
+    Returns:
+        pd.DataFrame: Input DataFrame with added 'RatioLightToHeavy_adj' column.
+    """
+    def get_factor(plate):
+        plate_str = str(int(plate)) if str(int(plate)) in conversion_factors else str(plate)
+        return conversion_factors[plate_str]
+
+    df = df.copy()
+    df['RatioLightToHeavy_adj'] = [
+        r / get_factor(p) for r, p in zip(df['RatioLightToHeavy'], df['Plate'])
+    ]
+    return df
 
 # ---------------------------------------------------------------------------
 # General QC
