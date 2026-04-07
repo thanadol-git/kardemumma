@@ -1,6 +1,6 @@
 import os
 import re
-from typing import List, Optional
+from typing import List, Literal, Optional, Set
 
 import pandas as pd
 from .sdrf import validate_sdrf as validate_sdrf_file
@@ -49,6 +49,109 @@ def _suggest_qc_replicate_names(df: pd.DataFrame) -> List[str]:
         )
     reps = df["Replicate"].dropna().astype(str)
     return sorted({r for r in reps.unique() if "qc" in r.lower()})
+
+
+def normalize_data_filename(
+    name: str,
+    *,
+    strip_acquisition_suffix: bool = True,
+) -> str:
+    """
+    Canonical form for comparing raw names between Skyline and SDRF.
+
+    - Uses basename only (strips any path / URI path segments).
+    - For ``.raw`` / ``.RAW``, optionally removes one or more trailing
+      ``_`` + 8–14 digit blocks (common acquisition / replicate suffixes),
+      e.g. ``..._Plate_5_C6_20251211114043.raw`` → ``..._Plate_5_C6.raw``.
+    """
+    s = str(name).strip().replace("\\", "/")
+    s = os.path.basename(s)
+    if not strip_acquisition_suffix:
+        return s
+    base, ext = os.path.splitext(s)
+    if ext.lower() != ".raw":
+        return s
+    pat = re.compile(r"_\d{8,14}$")
+    while pat.search(base):
+        base = pat.sub("", base, count=1)
+    return f"{base}{ext}"
+
+
+def _normalized_file_set(
+    series: pd.Series,
+    *,
+    strip_acquisition_suffix: bool,
+) -> Set[str]:
+    return {
+        normalize_data_filename(v, strip_acquisition_suffix=strip_acquisition_suffix)
+        for v in series.dropna().astype(str).unique()
+    }
+
+
+def cross_check_skyline_sdrf(
+    skyline_df: pd.DataFrame,
+    sdrf_df: pd.DataFrame,
+    *,
+    skyline_file_col: str = "File Name",
+    sdrf_file_col: str = "comment[data file]",
+    strip_acquisition_suffix: bool = True,
+    match_mode: Literal["exact", "sdrf_in_skyline"] = "sdrf_in_skyline",
+) -> bool:
+    """
+    Cross-check Skyline ``File Name`` values vs SDRF ``comment[data file]``.
+
+    By default, names are normalized (basename + strip trailing ``_########`` before
+    ``.raw``) and the check is **``sdrf_in_skyline``**: every distinct SDRF file must
+    appear in Skyline; extra Skyline files (e.g. repeated QC acquisitions) are allowed.
+
+    Use ``match_mode="exact"`` for strict set equality after normalization.
+    Use ``strip_acquisition_suffix=False`` to compare strings verbatim.
+
+    Raises:
+        KeyError: If required columns are missing.
+        ValueError: If the check fails (see message for only-Skyline / only-SDRF lists).
+
+    Returns:
+        ``True`` if the check passes.
+    """
+    for name, df, col in (
+        ("skyline", skyline_df, skyline_file_col),
+        ("sdrf", sdrf_df, sdrf_file_col),
+    ):
+        if col not in df.columns:
+            raise KeyError(f"{name}_df: missing column {col!r}. Found: {list(df.columns)}")
+
+    skyline_set = _normalized_file_set(
+        skyline_df[skyline_file_col],
+        strip_acquisition_suffix=strip_acquisition_suffix,
+    )
+    sdrf_set = _normalized_file_set(
+        sdrf_df[sdrf_file_col],
+        strip_acquisition_suffix=strip_acquisition_suffix,
+    )
+
+    if match_mode == "exact":
+        if skyline_set != sdrf_set:
+            only_skyline = sorted(skyline_set - sdrf_set)
+            only_sdrf = sorted(sdrf_set - skyline_set)
+            raise ValueError(
+                "Skyline vs SDRF raw file names do not match (exact, after normalization). "
+                f"Only in Skyline: {only_skyline}. Only in SDRF: {only_sdrf}."
+            )
+        return True
+
+    if match_mode == "sdrf_in_skyline":
+        missing_in_skyline = sorted(sdrf_set - skyline_set)
+        if missing_in_skyline:
+            extra_skyline = sorted(skyline_set - sdrf_set)
+            raise ValueError(
+                "After normalization, some SDRF raw files are missing from Skyline "
+                f"File Name: {missing_in_skyline}. "
+                f"(Skyline-only extras, allowed in this mode: {extra_skyline})"
+            )
+        return True
+
+    raise ValueError(f"Unknown match_mode: {match_mode!r}")
 
 
 class ImportFile():

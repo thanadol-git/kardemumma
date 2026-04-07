@@ -1,5 +1,11 @@
 from .client import SkylineClient
-from .importer import ImportFile, CheckSkylineFile, get_irt_peptides
+from .importer import (
+    ImportFile,
+    CheckSkylineFile,
+    cross_check_skyline_sdrf,
+    get_irt_peptides,
+    normalize_data_filename,
+)
 from .sdrf import validate_sdrf
 from .prm import (
     # Quality Filtering
@@ -38,7 +44,9 @@ __all__ = [
     "SkylineClient",
     "ImportFile",
     "CheckSkylineFile",
+    "cross_check_skyline_sdrf",
     "get_irt_peptides",
+    "normalize_data_filename",
     "validate_sdrf",
     # Quality Filtering
     "filter_library_dot_product",
