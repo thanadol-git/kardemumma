@@ -116,8 +116,8 @@ def summarise_peptide_counts(peptide_counts_df: pd.DataFrame) -> pd.DataFrame:
 
 def report_peptide_protein_summary(peptide_counts):
     """
-    Report summary statistics on peptide and protein detection.
-
+    Report summary statistics on peptide and protein detection. Then export list of 
+    peptides. 
     Args:
         peptide_counts: DataFrame containing summarised peptide counts, must include 'Peptide', 'heavy_count', and 'light_count'.
 
@@ -136,10 +136,13 @@ def report_peptide_protein_summary(peptide_counts):
         'num_unique_proteins': num_unique_proteins,
     }
 
+    peptide_list = list(pd.unique(peptide_counts['Peptide']))
+
     print(f"Number of unique peptides: {num_unique_peptides}")
     print(f"Number of unique proteins: {num_unique_proteins}")
+    print(f"List of selected peptides: {peptide_list}")
 
-    return summary_dict
+    return summary_dict, peptide_list
 
 
 # ---------------------------------------------------------------------------
