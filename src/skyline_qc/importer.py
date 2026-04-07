@@ -5,6 +5,15 @@ from typing import List, Literal, Optional, Set
 import pandas as pd
 from .sdrf import validate_sdrf as validate_sdrf_file
 
+__all__ = [
+    "CheckSkylineFile",
+    "ImportFile",
+    "MergeFiles",
+    "cross_check_skyline_sdrf",
+    "get_irt_peptides",
+    "normalize_data_filename",
+]
+
 
 def get_irt_peptides(
     df: pd.DataFrame,
@@ -345,3 +354,47 @@ class CheckSkylineFile():
         # Sort by Replicate and Peptide
         df = df.sort_values(by=['Replicate', 'Peptide'])
         return df
+
+class MergeFiles:
+    def __init__(
+        self,
+        skyline_df: pd.DataFrame,
+        sdrf_df: pd.DataFrame,
+        selected_peptides: Optional[List[str]] = None,
+    ):
+        """
+        Args:
+            skyline_df: Skyline long-format report (must include ``Replicate``, ``Peptide``).
+            sdrf_df: SDRF table (must include ``source name``, ``characteristics[Sample]``).
+            selected_peptides: If given, restrict ``skyline_df`` to these ``Peptide`` values
+                before merging. If ``None``, all peptides are kept.
+        """
+        self.skyline_df = skyline_df
+        self.sdrf_df = sdrf_df
+        self.selected_peptides = selected_peptides
+
+    def merge_files(self) -> pd.DataFrame:
+        """
+        Merge Skyline with SDRF on replicate / source name and add ``characteristics[Plate]``.
+        """
+        if self.selected_peptides is not None:
+            self.skyline_df = self.skyline_df[
+                self.skyline_df["Peptide"].isin(self.selected_peptides)
+            ].copy()
+
+        # 1. Check that both DataFrames contain the required columns before merging
+        required_skyline_cols = ['Replicate']
+        required_sdrf_cols = ['source name', 'characteristics[Sample]']
+        for col in required_skyline_cols:
+            if col not in self.skyline_df.columns:
+                raise ValueError(f"Missing column '{col}' in skyline_df")
+        for col in required_sdrf_cols:
+            if col not in self.sdrf_df.columns:
+                raise ValueError(f"Missing column '{col}' in sdrf_df")
+
+        # 2. Merge skyline_df with sdrf_df using 'Replicate' from skyline and 'comment[data file]' from sdrf_df
+        skyline_merge = pd.merge(self.skyline_df, self.sdrf_df[['source name', 'characteristics[Sample]']], left_on='Replicate', right_on='source name', how='left')
+
+        # 3. Create column characteristics[Plate] from characteristics[Sample] (should be whatever comes after 'Plate_' in Replicate)
+        skyline_merge['characteristics[Plate]'] = skyline_merge['Replicate'].str.extract(r'Plate_(\d+)')
+        return skyline_merge

@@ -8,6 +8,7 @@ from ``skyline_qc`` directly.
 from .importer import (
     CheckSkylineFile,
     ImportFile,
+    MergeFiles,
     cross_check_skyline_sdrf,
     get_irt_peptides,
     normalize_data_filename,
@@ -16,6 +17,7 @@ from .importer import (
 __all__ = [
     "CheckSkylineFile",
     "ImportFile",
+    "MergeFiles",
     "cross_check_skyline_sdrf",
     "get_irt_peptides",
     "normalize_data_filename",

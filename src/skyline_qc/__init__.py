@@ -2,6 +2,7 @@ from .client import SkylineClient
 from .importer import (
     ImportFile,
     CheckSkylineFile,
+    MergeFiles,
     cross_check_skyline_sdrf,
     get_irt_peptides,
     normalize_data_filename,
@@ -44,6 +45,7 @@ __all__ = [
     "SkylineClient",
     "ImportFile",
     "CheckSkylineFile",
+    "MergeFiles",
     "cross_check_skyline_sdrf",
     "get_irt_peptides",
     "normalize_data_filename",
