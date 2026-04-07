@@ -180,33 +180,14 @@ def plot_inter_plate_cv_kde(peptide_plate_stats):
     )
     peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
 
-    fig, ax1 = plt.subplots(figsize=(12, 6))
-
-    # KDE
-    sns.kdeplot(peptide_means['inter_plate_cv'].dropna(), fill=True, ax=ax1, color='steelblue', label="KDE")
+    fig = plt.figure(figsize=(12, 6))
+    sns.kdeplot(peptide_means['inter_plate_cv'].dropna(), fill=True)
     median_cv = peptide_means['inter_plate_cv'].median()
-    ax1.axvline(median_cv, color='red', linestyle='--', label=f'Median = {median_cv:.2f}')
-
-    # Cumulative count axis
-    ax2 = ax1.twinx()
-    cv_sorted = peptide_means[['inter_plate_cv', 'Peptide Sequence']].sort_values('inter_plate_cv').reset_index(drop=True)
-    cv_sorted['cumulative_count'] = range(1, len(cv_sorted) + 1)
-    ax2.plot(cv_sorted['inter_plate_cv'], cv_sorted['cumulative_count'], color='orange', alpha=0.8, marker='o', ms=3, lw=1.5, label='Cumulative Peptides')
-    ax2.set_ylabel('Cumulative Number of Peptides', color='orange')
-    ax2.tick_params(axis='y', labelcolor='orange')
-
-    # Labels and legend
-    ax1.set_title('KDE and Cumulative Count of Inter-Plate CV Across Peptides')
-    ax1.set_xlabel('Inter-Plate CV')
-    ax1.set_ylabel('Density', color='steelblue')
-    ax1.tick_params(axis='y', labelcolor='steelblue')
-
-    # Combine legends
-    lines_1, labels_1 = ax1.get_legend_handles_labels()
-    lines_2, labels_2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left')
-
-    plt.tight_layout()
+    plt.axvline(median_cv, color='red', linestyle='--', label=f'Median = {median_cv:.2f}')
+    plt.title('KDE Plot of Inter-Plate CV Across Peptides')
+    plt.xlabel('Inter-Plate CV')
+    plt.ylabel('Density')
+    plt.legend()
     plt.show()
     return fig
 
