@@ -29,6 +29,71 @@ import statsmodels.formula.api as smf
 from statsmodels.stats.anova import anova_lm
 
 
+def _to_python_scalar(x):
+    """
+    Reduce nested array/Series/list values to a plain Python scalar for patsy ``C()``.
+    Patsy raises if any category cell is array-like with ``ndim > 1`` or remains non-scalar.
+    """
+    if x is None:
+        return np.nan
+    if isinstance(x, (float, np.floating)) and pd.isna(x):
+        return np.nan
+    if isinstance(x, str):
+        return x
+    if isinstance(x, (bytes, np.str_)):
+        return x.decode() if isinstance(x, bytes) else str(x)
+    if isinstance(x, (bool, np.bool_)):
+        return bool(x)
+    if isinstance(x, (int, np.integer)):
+        return int(x)
+    if isinstance(x, (float, np.floating)):
+        return float(x)
+    if isinstance(x, pd.Series):
+        return np.nan if x.empty else _to_python_scalar(x.iloc[0])
+    if isinstance(x, np.ndarray):
+        if x.size == 0:
+            return np.nan
+        if x.ndim > 1:
+            return _to_python_scalar(x.ravel()[0])
+        if x.dtype == object:
+            return _to_python_scalar(x.item()) if x.shape == () else _to_python_scalar(x.flat[0])
+        out = x.flat[0]
+        return _to_python_scalar(out) if isinstance(out, np.ndarray) else out.item()
+    if isinstance(x, (list, tuple)):
+        return np.nan if len(x) == 0 else _to_python_scalar(x[0])
+    return x
+
+
+def _as_1d_series(df: pd.DataFrame, col: str) -> pd.Series:
+    """Return ``df[col]`` as a single Series (first duplicate column if needed)."""
+    if col not in df.columns:
+        raise KeyError(f"Missing column {col!r}. Found: {list(df.columns)}")
+    obj = df[col]
+    if isinstance(obj, pd.DataFrame):
+        return obj.iloc[:, 0].copy()
+    return obj.copy()
+
+
+def _patsy_scalar_categorical(series: pd.Series) -> pd.Series:
+    return series.map(_to_python_scalar)
+
+
+def _formula_clean_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Drop duplicate / MultiIndex column names and reset index so patsy sees a flat table.
+    """
+    out = df.copy()
+    if isinstance(out.columns, pd.MultiIndex):
+        out.columns = [
+            "_".join(str(p) for p in tup if str(p) != "")
+            if isinstance(tup, tuple)
+            else tup
+            for tup in out.columns
+        ]
+    out = out.loc[:, ~out.columns.duplicated(keep="first")]
+    return out.reset_index(drop=True)
+
+
 # ---------------------------------------------------------------------------
 # Quality Filtering
 # ---------------------------------------------------------------------------
@@ -214,33 +279,79 @@ def get_peptides_below_cv_percentile(peptide_means, percentile):
 
 def plate_peptide_anova(selected_norm_peptides):
     """
-    Fits a two-way ANOVA linear model to decompose variation in ratio measurements
-    into contributions from plate and peptide effects.
+    Fit a two-way ANOVA (RatioLightToHeavy ~ Plate + Peptide) to assess plate and peptide effects.
 
     Args:
-        selected_norm_peptides (pd.DataFrame): DataFrame with
-            'characteristics[Plate]', 'Peptide Sequence', and 'RatioLightToHeavy' columns.
+        selected_norm_peptides (pd.DataFrame): Requires
+            ``RatioLightToHeavy`` and plate / peptide identifiers. Accepts
+            ``characteristics[Plate]`` and ``Peptide Sequence``, or ``Plate`` and ``Peptide``.
 
     Returns:
-        model: The fitted statsmodels OLS linear model.
-        anova_res: The ANOVA decomposition results (as a DataFrame).
+        model: statsmodels OLS result
+        anova_res: ANOVA table (DataFrame)
     """
-    df = selected_norm_peptides.rename(
-        columns={
-            'characteristics[Plate]': 'Plate',
-            'Peptide Sequence': 'Peptide',
-        }
-    ).copy()
+    df = _formula_clean_frame(selected_norm_peptides.copy())
+    rename_map: dict[str, str] = {}
+    if "characteristics[Plate]" in df.columns and "Plate" not in df.columns:
+        rename_map["characteristics[Plate]"] = "Plate"
+    elif "characteristics[Plate]" in df.columns and "Plate" in df.columns:
+        df = df.drop(columns=["characteristics[Plate]"])
+    if "Peptide Sequence" in df.columns and "Peptide" not in df.columns:
+        rename_map["Peptide Sequence"] = "Peptide"
+    elif "Peptide Sequence" in df.columns and "Peptide" in df.columns:
+        # Prefer explicit ``Peptide``; drop duplicate source column after rename collision
+        df = df.drop(columns=["Peptide Sequence"])
+    df = df.rename(columns=rename_map)
+    df = _formula_clean_frame(df)
 
-    df['RatioLightToHeavy'] = pd.to_numeric(df['RatioLightToHeavy'], errors='coerce')
-    df = df.dropna(subset=['RatioLightToHeavy', 'Plate', 'Peptide'])
+    missing = [
+        c
+        for c in ("RatioLightToHeavy", "Plate", "Peptide")
+        if c not in df.columns
+    ]
+    if missing:
+        raise KeyError(
+            f"plate_peptide_anova missing columns {missing!r}. "
+            f"Have: {list(df.columns)!r}"
+        )
 
-    model = smf.ols('RatioLightToHeavy ~ C(Plate) + C(Peptide)', data=df).fit()
-    print(model.summary())
+    ratio = pd.to_numeric(
+        _patsy_scalar_categorical(_as_1d_series(df, "RatioLightToHeavy")),
+        errors="coerce",
+    )
+    plate = _patsy_scalar_categorical(_as_1d_series(df, "Plate"))
+    peptide = _patsy_scalar_categorical(_as_1d_series(df, "Peptide"))
+    df = (
+        pd.DataFrame(
+            {"RatioLightToHeavy": ratio, "Plate": plate, "Peptide": peptide}
+        )
+        .dropna(subset=["RatioLightToHeavy", "Plate", "Peptide"])
+        .reset_index(drop=True)
+    )
 
+    df["Plate"] = df["Plate"].astype(str)
+    df["Peptide"] = df["Peptide"].astype(str)
+
+    # Fit model
+    model = smf.ols("RatioLightToHeavy ~ C(Plate) + C(Peptide)", data=df).fit()
     anova_res = anova_lm(model, typ=2)
+
+    # Print summary and ANOVA table
+    print(model.summary())
     print(anova_res)
 
+    # Report plate effect p-value if possible
+    f_col = [c for c in anova_res.columns if "PR" in c or "p" in c][0]
+    plate_row = [i for i in anova_res.index if "plate" in str(i).lower()]
+    if plate_row:
+        plate_p = anova_res.loc[plate_row[0], f_col]
+        print(f"Plate effect p-value: {plate_p}")
+        if pd.isnull(plate_p):
+            print("Warning: Plate effect p-value is NaN.")
+        elif plate_p < 0.05:
+            print("Plate effect is significant. There is a significant effect of plate on the ratio.")
+        else:
+            print("Plate effect is not significant. There is no significant effect of plate on the ratio.")
     return model, anova_res
 
 
