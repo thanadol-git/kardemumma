@@ -170,7 +170,7 @@ def calculate_intra_plate_cv(pool_data: pd.DataFrame, col_name: str = 'character
     return peptide_plate_stats
 
 
-def get_peptide_means(peptide_plate_stats):
+def calculate_inter_plate_cv(peptide_plate_stats):
     """
     Given a DataFrame of peptide_plate_stats (output of calculate_intra_plate_cv),
     return a DataFrame of peptide_means with columns:

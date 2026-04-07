@@ -17,7 +17,7 @@ from .prm import (
     report_peptide_protein_summary,
     # CV Analysis
     calculate_intra_plate_cv,
-    get_peptide_means,
+    calculate_inter_plate_cv,
     get_peptides_below_cv_percentile,
     # Plate Normalization
     plate_peptide_anova,
@@ -58,7 +58,7 @@ __all__ = [
     "report_peptide_protein_summary",
     # CV Analysis
     "calculate_intra_plate_cv",
-    "get_peptide_means",
+    "calculate_inter_plate_cv",
     "get_peptides_below_cv_percentile",
     # Plate Normalization
     "plate_peptide_anova",
