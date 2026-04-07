@@ -102,19 +102,30 @@ def plot_pool_boxplot(pool_df):
     plt.show()
 
 
-def plot_pool_heatmap(pool_data):
+def plot_pool_heatmap(pool_data, aggfunc: str = "mean"):
     """
     Plot a heatmap of log(RatioLightToHeavy) for Pool samples.
     Peptides (rows) and Replicates (columns) are both ordered by their mean log-ratio.
 
+    If several rows share the same peptide and replicate (e.g. multiple precursors),
+    values are aggregated with *aggfunc* (default ``mean``) so the table is unique
+    for ``pivot_table``.
+
     Args:
         pool_data (pd.DataFrame): DataFrame filtered for Pool samples, must have columns
-                                  'Peptide Sequence', 'Replicate', 'RatioLightToHeavy'
+            ``Peptide Sequence``, ``Replicate``, ``RatioLightToHeavy``.
+        aggfunc: Passed to :meth:`pandas.DataFrame.pivot_table` (e.g. ``\"mean\"``, ``\"median\"``, ``\"first\"``).
     """
-    pivot = pool_data.pivot(
-        index='Peptide Sequence',
-        columns='Replicate',
-        values='RatioLightToHeavy'
+    required = ["Peptide Sequence", "Replicate", "RatioLightToHeavy"]
+    missing = [c for c in required if c not in pool_data.columns]
+    if missing:
+        raise KeyError(f"pool_data missing columns {missing}. Found: {list(pool_data.columns)}")
+
+    pivot = pool_data.pivot_table(
+        index="Peptide Sequence",
+        columns="Replicate",
+        values="RatioLightToHeavy",
+        aggfunc=aggfunc,
     )
 
     heatmap_data = np.log(pivot)
