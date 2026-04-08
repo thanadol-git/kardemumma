@@ -6,6 +6,7 @@ from .importer import (
     cross_check_skyline_sdrf,
     get_irt_peptides,
     normalize_data_filename,
+    import_sdrf_file,
 )
 from .sdrf import validate_sdrf
 from .prm import (
@@ -20,6 +21,7 @@ from .prm import (
     calculate_inter_plate_cv,
     get_peptides_below_cv_percentile,
     extract_top_percentile,
+    get_lowest_cv_peptides,
     # Plate Normalization
     plate_peptide_anova,
     get_plate_conversion_factors,
@@ -52,6 +54,7 @@ __all__ = [
     "cross_check_skyline_sdrf",
     "get_irt_peptides",
     "normalize_data_filename",
+    "import_sdrf_file",
     "validate_sdrf",
     # Quality Filtering
     "filter_library_dot_product",
@@ -64,6 +67,7 @@ __all__ = [
     "calculate_inter_plate_cv",
     "get_peptides_below_cv_percentile",
     "extract_top_percentile",
+    "get_lowest_cv_peptides",
     # Plate Normalization
     "plate_peptide_anova",
     "get_plate_conversion_factors",
