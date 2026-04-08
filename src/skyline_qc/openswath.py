@@ -117,8 +117,11 @@ def import_openswath_file(file_path: str, remove_file_path: bool = False) -> pd.
         # In column 'filename', extract string after the last '/', only if it ends with .mzML or .raw
         df['filename'] = df['filename'].str.extract(r'([^/]+\.mzML|[^/]+\.raw)$', expand=False)
  
+    # Sort by column 'filename'
+    sorting_column = ['filename', 'FullPeptideName', 'feature_id']
+    df = df.sort_values(sorting_column)
 
-    return df
+    return df.reset_index(drop=True)
 
 
 def filter_best_peak_group(df: pd.DataFrame, threshold: float = 0.95) -> pd.DataFrame:
