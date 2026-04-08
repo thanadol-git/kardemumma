@@ -46,3 +46,8 @@ You can install the dependencies and set up the environment using [Conda](https:
 2. Check with Yasset on how to set up targeted sdrf. 
 2. Work a bit with SRM 
 3. Combine with OpenMS 
+
+## Issues
+- iRT peptides. Why they contain Biognosys sequences? 
+- Oxidation
+- Stat for PEP
