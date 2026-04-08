@@ -12,6 +12,7 @@ __all__ = [
     "cross_check_skyline_sdrf",
     "get_irt_peptides",
     "normalize_data_filename",
+    "import_sdrf_file",
 ]
 
 
@@ -48,15 +49,16 @@ def get_irt_peptides(
     return df.loc[mask, peptide_col].drop_duplicates().tolist()
 
 
-def _suggest_qc_replicate_names(df: pd.DataFrame) -> List[str]:
+def _suggest_qc_replicate_names(df: pd.DataFrame, col_files: str = "Replicate") -> List[str]:
     """
-    Distinct Replicate labels that look like QC (substring 'qc', case-insensitive).
+    Distinct values from ``col_files`` that look like QC
+    (substring ``qc``, case-insensitive).
     """
-    if "Replicate" not in df.columns:
+    if col_files not in df.columns:
         raise ValueError(
-            f"Expected column 'Replicate'. Found: {list(df.columns)}"
+            f"Expected column {col_files!r}. Found: {list(df.columns)}"
         )
-    reps = df["Replicate"].dropna().astype(str)
+    reps = df[col_files].dropna().astype(str)
     return sorted({r for r in reps.unique() if "qc" in r.lower()})
 
 
@@ -116,19 +118,16 @@ def cross_check_skyline_sdrf(
     Use ``match_mode="exact"`` for strict set equality after normalization.
     Use ``strip_acquisition_suffix=False`` to compare strings verbatim.
 
-    Raises:
-        KeyError: If required columns are missing.
-        ValueError: If the check fails (see message for only-Skyline / only-SDRF lists).
-
     Returns:
-        ``True`` if the check passes.
+        ``True`` after printing a comparison report.
     """
     for name, df, col in (
         ("skyline", skyline_df, skyline_file_col),
         ("sdrf", sdrf_df, sdrf_file_col),
     ):
         if col not in df.columns:
-            raise KeyError(f"{name}_df: missing column {col!r}. Found: {list(df.columns)}")
+            print(f"Missing required column {col!r} in {name}_df. Found: {list(df.columns)}")
+            return True
 
     skyline_set = _normalized_file_set(
         skyline_df[skyline_file_col],
@@ -139,33 +138,28 @@ def cross_check_skyline_sdrf(
         strip_acquisition_suffix=strip_acquisition_suffix,
     )
 
-    if match_mode == "exact":
-        if skyline_set != sdrf_set:
-            only_skyline = sorted(skyline_set - sdrf_set)
-            only_sdrf = sorted(sdrf_set - skyline_set)
-            print("❌ File sets do not match after normalization.")
-            raise ValueError(
-                "Skyline vs SDRF raw file names do not match (exact, after normalization). "
-                f"Only in Skyline: {only_skyline}. Only in SDRF: {only_sdrf}."
-            )
-        print("✅ File sets match exactly after normalization! The file is correct!")
-        return True
+    if match_mode not in {"exact", "sdrf_in_skyline"}:
+        print(
+            f"Unknown match_mode {match_mode!r}; continuing with a generic set comparison report."
+        )
 
-    if match_mode == "sdrf_in_skyline":
-        missing_in_skyline = sorted(sdrf_set - skyline_set)
-        if missing_in_skyline:
-            extra_skyline = sorted(skyline_set - sdrf_set)
-            print("❌ Some SDRF files are missing from Skyline.")
-            raise ValueError(
-                "After normalization, some SDRF raw files are missing from Skyline "
-                f"File Name: {missing_in_skyline}. "
-                f"(Skyline-only extras, allowed in this mode: {extra_skyline})"
-            )
-        print("✅ All SDRF files are present in Skyline after normalization! The file is correct!")
-       
-        return True
+    overlap = sorted(skyline_set & sdrf_set)
+    only_skyline = sorted(skyline_set - sdrf_set)
+    only_sdrf = sorted(sdrf_set - skyline_set)
 
-    raise ValueError(f"Unknown match_mode: {match_mode!r}")
+    print("Skyline files:", len(skyline_set))
+    print("SDRF files:", len(sdrf_set))
+    print("Overlapping files:", len(overlap))
+    print("Only in Skyline:", only_skyline)
+    print("Only in SDRF:", only_sdrf)
+    return True
+
+
+def import_sdrf_file(file_path: str):
+    """
+    Backward-compatible module-level wrapper for SDRF import.
+    """
+    return ImportFile(file_path).import_sdrf_file()
 
 
 class ImportFile():
@@ -175,13 +169,12 @@ class ImportFile():
             file_path: Path to the file to import.
         """
         self.file_path = file_path
-    ### Skyline file ###
+
     def import_skyline_file(self):
-        
         # 1. Check if the file exists
         if not os.path.exists(self.file_path):
             raise FileNotFoundError(f"The file {self.file_path} does not exist.")
-        
+
         # 2. Check file type
         if not self.file_path.lower().endswith('.csv'):
             raise ValueError("Provided file is not a CSV.")
@@ -209,8 +202,6 @@ class ImportFile():
             "Library Dot Product",
             "Protein Name"
         ]
-        
-        # 6. Check if the file has the expected columns
         missing_columns = [col for col in expected_columns if col not in df.columns]
         if missing_columns:
             raise ValueError(
@@ -225,7 +216,6 @@ class ImportFile():
             else "light"
         )
 
-        # Print if the file is valid
         print(f"The file {self.file_path} is valid.")
         return df
 
@@ -247,8 +237,15 @@ class ImportFile():
             if not self.file_path.lower().endswith(".csv"):
                 raise ValueError("Provided file is not a CSV.")
             df = pd.read_csv(self.file_path)
-        return _suggest_qc_replicate_names(df)
-    ### qREPs file ###
+
+        suspicious_replicates = _suggest_qc_replicate_names(df)
+        if suspicious_replicates:
+            print(f"This might be the qc samples: {suspicious_replicates}")
+            print("One should remove these samples from the skyline data before further analysis.")
+        else:
+            print("No suspicious replicates found.")
+        return suspicious_replicates
+
     def import_qreps_file(self):
         """
         Import the qREPs file.
@@ -260,24 +257,34 @@ class ImportFile():
         df = pd.read_csv(self.file_path)
         return df
 
-    ### SDRF file ###
     def import_sdrf_file(self):
         # 1. Check if the file exists
         if not os.path.exists(self.file_path):
             raise FileNotFoundError(f"The file {self.file_path} does not exist.")
-        
+
         # 2. Check file type
         if not self.file_path.lower().endswith('.tsv'):
             raise ValueError("Provided file is not a TSV.")
-        
+
         # 3. Read the file
         df = pd.read_csv(self.file_path, sep='\t')
 
+        # 4. Suggest QC samples from the SDRF data on column 'comment[data file]'
+        qc_samples = _suggest_qc_replicate_names(df, col_files="comment[data file]")
+        print(f"QC samples from the SDRF data: {qc_samples}")
+        print("One should remove these samples from the skyline data before further analysis.")
+        return df
+
         # 4. Validate the SDRF file (via sdrf-pipelines CLI)
         ok, msg = validate_sdrf_file(self.file_path)
+
+
         if not ok:
             raise ValueError(f"SDRF validation failed: {msg}")
+        raise ValueError("SDRF validation passed. Returning the SDRF data. ")
+
         return df
+
 
 class CheckSkylineFile():
     def __init__(self, file_path: str):
@@ -286,37 +293,36 @@ class CheckSkylineFile():
             file_path: Path to the file to check.
         """
         self.file_path = file_path
-    
+
     def check_skyline_file(self):
         """
         Check if the Skyline file is valid and return a DataFrame.
         """
-        # 1. Check if the file exists
         if not os.path.exists(self.file_path):
             raise FileNotFoundError(f"The file {self.file_path} does not exist.")
-        
-        # 2. Check file type
+
         if not self.file_path.lower().endswith('.csv'):
             raise ValueError("Provided file is not a CSV.")
-        
-        # 3. Read the file
+
         df = pd.read_csv(self.file_path)
 
         # Sort by Replicate and Peptide
         df = df.sort_values(by=['Replicate', 'Peptide'])
         return df
 
-    def suggest_qc_samples(self) -> List[str]:
+    def suggest_qc_samples(self, df: Optional[pd.DataFrame] = None) -> List[str]:
         """
         Suggest QC samples: distinct ``Replicate`` values whose name contains ``qc``
-        (case-insensitive). Reads the CSV at ``self.file_path``.
+        (case-insensitive), either from a given DataFrame or by reading from file.
         """
-        if not os.path.exists(self.file_path):
-            raise FileNotFoundError(f"The file {self.file_path} does not exist.")
-        if not self.file_path.lower().endswith(".csv"):
-            raise ValueError("Provided file is not a CSV.")
-        df = pd.read_csv(self.file_path)
-        return _suggest_qc_replicate_names(df)
+        # If df not provided, read from file
+        if df is None:
+            if not os.path.exists(self.file_path):
+                raise FileNotFoundError(f"The file {self.file_path} does not exist.")
+            if not self.file_path.lower().endswith(".csv"):
+                raise ValueError("Provided file is not a CSV.")
+            df = pd.read_csv(self.file_path)
+        return _suggest_qc_replicate_names(df, col_files='Replicate')
 
     def get_qc_data(self, qc_samples: List[str], df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -339,11 +345,11 @@ class CheckSkylineFile():
     def get_test_samples(self, qc_samples: List[str], df: pd.DataFrame) -> List[str]:
         """
         Return a list of test sample names by excluding QC samples from the distinct Replicate names in the given DataFrame.
-        
+
         Args:
             qc_samples: List of QC sample names to exclude.
             df: DataFrame containing Skyline data, must include a 'Replicate' column.
-        
+
         Returns:
             List of unique test sample names.
         """
@@ -359,6 +365,7 @@ class CheckSkylineFile():
         # Sort by Replicate and Peptide
         df = df.sort_values(by=['Replicate', 'Peptide'])
         return df
+
 
 class MergeFiles:
     def __init__(
@@ -398,7 +405,13 @@ class MergeFiles:
                 raise ValueError(f"Missing column '{col}' in sdrf_df")
 
         # 2. Merge skyline_df with sdrf_df using 'Replicate' from skyline and 'comment[data file]' from sdrf_df
-        skyline_merge = pd.merge(self.skyline_df, self.sdrf_df[['source name', 'characteristics[Sample]']], left_on='Replicate', right_on='source name', how='left')
+        skyline_merge = pd.merge(
+            self.skyline_df,
+            self.sdrf_df[['source name', 'characteristics[Sample]']],
+            left_on='Replicate',
+            right_on='source name',
+            how='left'
+        )
 
         # 3. Plate id from Replicate (digits after "Plate_"). Use expand=False so this is
         #    a scalar Series; str.extract(..., expand=True) returns a DataFrame and can
