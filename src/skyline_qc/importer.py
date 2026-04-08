@@ -414,7 +414,7 @@ class MergeFiles:
         df = df[df[col_sample] == sample_value]
 
         # Sort by Plate
-        df = df.sort_values(by=['characteristics[Plate]'])
+        df = df.sort_values(by=['Replicate', 'Peptide','Isotope Label Type'])
         # Reset index
         df = df.reset_index(drop=True)
         return df   
