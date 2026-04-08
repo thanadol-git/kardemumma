@@ -21,8 +21,6 @@ and works with the following key columns:
 Plotting functions are in :mod:`skyline_qc.prm_plots`.
 """
 
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
