@@ -8,7 +8,7 @@ data
 results
 export
 .venv
-
+openms
 # Python
 __pycache__/
 *.pyc
