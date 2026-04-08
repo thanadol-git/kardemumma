@@ -436,6 +436,42 @@ def plate_peptide_anova(
 
 
 
+def fit_plate_logratio_model(
+    df: pd.DataFrame,
+    plate_col: str = "Plate",
+    ratio_col: str = "RatioLightToHeavy",
+):
+    """
+    Backward-compatible helper to fit ``log_ratio ~ C(Plate)``.
+
+    This keeps the previous public API used by notebooks and delegates to
+    :func:`get_plate_conversion_factors`.
+    """
+    work = _formula_clean_frame(df.copy())
+    if plate_col not in work.columns:
+        raise KeyError(
+            f"fit_plate_logratio_model missing plate column {plate_col!r}. "
+            f"Have: {list(work.columns)!r}"
+        )
+    if ratio_col not in work.columns:
+        raise KeyError(
+            f"fit_plate_logratio_model missing ratio column {ratio_col!r}. "
+            f"Have: {list(work.columns)!r}"
+        )
+
+    if plate_col != "Plate":
+        if "Plate" in work.columns:
+            work = work.drop(columns=["Plate"])
+        work = work.rename(columns={plate_col: "Plate"})
+
+    if ratio_col != "RatioLightToHeavy":
+        if "RatioLightToHeavy" in work.columns:
+            work = work.drop(columns=["RatioLightToHeavy"])
+        work = work.rename(columns={ratio_col: "RatioLightToHeavy"})
+
+    return get_plate_conversion_factors(work)
+
+
 def get_plate_conversion_factors(df, log_transform: bool = False):
     """
     Fit ``log_ratio ~ C(Plate)`` and return multiplicative correction factors per plate.
