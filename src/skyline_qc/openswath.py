@@ -132,7 +132,11 @@ def filter_best_peak_group(df: pd.DataFrame, threshold: float = 0.95) -> pd.Data
     Returns:
         pd.DataFrame: The filtered OpenSWATH results DataFrame.
     """
+
+    # Remove decoys
     df = df[df['decoy'] == 0]
-    df = df[df['VAR_LIBRARY_DOTPROD'] >= 0.95]
-    df = df.groupby(['run_id', 'transition_group_id']).apply(lambda x: x.loc[x['peak_group_rank'] == 1]).reset_index(drop=True)   
-    return df
+
+    # Remove rows where VAR_LIBRARY_DOTPROD is less than the threshold
+    df = df[df['VAR_LIBRARY_DOTPROD'] >= threshold]
+
+    return df.reset_index(drop=True)
