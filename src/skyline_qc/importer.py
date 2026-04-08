@@ -3,7 +3,6 @@ import re
 from typing import List, Literal, Optional, Set
 
 import pandas as pd
-from .sdrf import validate_sdrf as validate_sdrf_file
 
 __all__ = [
     "CheckSkylineFile",
@@ -275,16 +274,6 @@ class ImportFile():
         print("One should remove these samples from the skyline data before further analysis.")
         return df
 
-        # 4. Validate the SDRF file (via sdrf-pipelines CLI)
-        ok, msg = validate_sdrf_file(self.file_path)
-
-
-        if not ok:
-            raise ValueError(f"SDRF validation failed: {msg}")
-        raise ValueError("SDRF validation passed. Returning the SDRF data. ")
-
-        return df
-
 
 class CheckSkylineFile():
     def __init__(self, file_path: str):
@@ -324,11 +313,6 @@ class CheckSkylineFile():
             df = pd.read_csv(self.file_path)
         return _suggest_qc_replicate_names(df, col_files='Replicate')
 
-    def get_qc_data(self, qc_samples: List[str], df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Get QC data from the Skyline data object.
-        """
-        return df[df['Replicate'].isin(qc_samples)]
 
     def get_irt_peptides(self) -> List[str]:
         """
@@ -342,19 +326,19 @@ class CheckSkylineFile():
         df = pd.read_csv(self.file_path)
         return get_irt_peptides(df)
 
-    def get_test_samples(self, qc_samples: List[str], df: pd.DataFrame) -> List[str]:
+    def get_test_samples(self, removed_samples: List[str], df: pd.DataFrame) -> List[str]:
         """
         Return a list of test sample names by excluding QC samples from the distinct Replicate names in the given DataFrame.
 
         Args:
-            qc_samples: List of QC sample names to exclude.
+            removed_samples: List of sample names to exclude.
             df: DataFrame containing Skyline data, must include a 'Replicate' column.
 
         Returns:
             List of unique test sample names.
         """
         all_samples = set(df["Replicate"].unique())
-        test_samples = sorted(list(all_samples - set(qc_samples)))
+        test_samples = sorted(list(all_samples - set(removed_samples)))
         return test_samples
 
     def get_test_data(self, test_samples: List[str], df: pd.DataFrame) -> pd.DataFrame:
@@ -389,24 +373,25 @@ class MergeFiles:
         """
         Merge Skyline with SDRF on replicate / source name and add ``characteristics[Plate]``.
         """
+        skyline_df = self.skyline_df
         if self.selected_peptides is not None:
-            self.skyline_df = self.skyline_df[
-                self.skyline_df["Peptide"].isin(self.selected_peptides)
+            skyline_df = skyline_df[
+                skyline_df["Peptide"].isin(self.selected_peptides)
             ].copy()
 
         # 1. Check that both DataFrames contain the required columns before merging
         required_skyline_cols = ['Replicate']
         required_sdrf_cols = ['source name', 'characteristics[Sample]']
         for col in required_skyline_cols:
-            if col not in self.skyline_df.columns:
+            if col not in skyline_df.columns:
                 raise ValueError(f"Missing column '{col}' in skyline_df")
         for col in required_sdrf_cols:
             if col not in self.sdrf_df.columns:
                 raise ValueError(f"Missing column '{col}' in sdrf_df")
 
-        # 2. Merge skyline_df with sdrf_df using 'Replicate' from skyline and 'comment[data file]' from sdrf_df
+        # 2. Merge skyline_df with sdrf_df using 'Replicate' from skyline and 'source name' from sdrf_df
         skyline_merge = pd.merge(
-            self.skyline_df,
+            skyline_df,
             self.sdrf_df[['source name', 'characteristics[Sample]']],
             left_on='Replicate',
             right_on='source name',
@@ -421,3 +406,15 @@ class MergeFiles:
             plate = plate.squeeze(axis=1)
         skyline_merge["characteristics[Plate]"] = plate
         return skyline_merge
+
+    def select_pool_data(self, df: pd.DataFrame, col_sample: str = 'characteristics[Sample]', sample_value: str = 'Pool') -> pd.DataFrame:
+        """
+        Select pool data from the DataFrame.
+        """
+        df = df[df[col_sample] == sample_value]
+
+        # Sort by Plate
+        df = df.sort_values(by=['characteristics[Plate]'])
+        # Reset index
+        df = df.reset_index(drop=True)
+        return df   
