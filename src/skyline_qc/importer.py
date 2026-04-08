@@ -143,21 +143,26 @@ def cross_check_skyline_sdrf(
         if skyline_set != sdrf_set:
             only_skyline = sorted(skyline_set - sdrf_set)
             only_sdrf = sorted(sdrf_set - skyline_set)
+            print("❌ File sets do not match after normalization.")
             raise ValueError(
                 "Skyline vs SDRF raw file names do not match (exact, after normalization). "
                 f"Only in Skyline: {only_skyline}. Only in SDRF: {only_sdrf}."
             )
+        print("✅ File sets match exactly after normalization! The file is correct!")
         return True
 
     if match_mode == "sdrf_in_skyline":
         missing_in_skyline = sorted(sdrf_set - skyline_set)
         if missing_in_skyline:
             extra_skyline = sorted(skyline_set - sdrf_set)
+            print("❌ Some SDRF files are missing from Skyline.")
             raise ValueError(
                 "After normalization, some SDRF raw files are missing from Skyline "
                 f"File Name: {missing_in_skyline}. "
                 f"(Skyline-only extras, allowed in this mode: {extra_skyline})"
             )
+        print("✅ All SDRF files are present in Skyline after normalization! The file is correct!")
+       
         return True
 
     raise ValueError(f"Unknown match_mode: {match_mode!r}")
