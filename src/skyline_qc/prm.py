@@ -307,6 +307,7 @@ def plate_peptide_anova(
     selected_norm_peptides,
     plate_col: str = "characteristics[Plate]",
     log_transform: bool = False,
+    return_conversion: bool = False,
 ):
     """
     Fit a two-way ANOVA on ratio ~ plate + peptide.
@@ -318,7 +319,9 @@ def plate_peptide_anova(
         log_transform: If True, model ``log(RatioLightToHeavy)`` (only rows with ratio > 0).
 
     Returns:
-        ``model``: statsmodels OLS result; ``anova_res``: Type II ANOVA table.
+        By default: ``model`` (statsmodels OLS result), ``anova_res`` (Type II ANOVA table).
+        If ``return_conversion=True``: also returns
+        ``conv_factors_df`` and ``conversion_factors``.
 
     See :func:`get_plate_conversion_factors` for plate correction factors (e.g. on the
     dataframe returned by :func:`fit_plate_logratio_model`).
@@ -429,7 +432,9 @@ def plate_peptide_anova(
     # Calculate conversion factors
     conv_factors_df, conversion_factors, _ = get_plate_conversion_factors(df, log_transform=log_transform)
 
-    return model, anova_res, conv_factors_df, conversion_factors
+    if return_conversion:
+        return model, anova_res, conv_factors_df, conversion_factors
+    return model, anova_res
 
 
 

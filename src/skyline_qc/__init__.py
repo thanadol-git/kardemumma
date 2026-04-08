@@ -22,7 +22,6 @@ from .prm import (
     extract_top_percentile,
     # Plate Normalization
     plate_peptide_anova,
-    fit_plate_logratio_model,
     get_plate_conversion_factors,
     adjust_ratio_by_plate,
     # General QC
@@ -67,7 +66,6 @@ __all__ = [
     "extract_top_percentile",
     # Plate Normalization
     "plate_peptide_anova",
-    "fit_plate_logratio_model",
     "get_plate_conversion_factors",
     "adjust_ratio_by_plate",
     # General QC
