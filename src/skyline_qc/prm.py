@@ -21,10 +21,14 @@ and works with the following key columns:
 Plotting functions are in :mod:`skyline_qc.prm_plots`.
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
 import statsmodels.formula.api as smf
 from statsmodels.stats.anova import anova_lm
+
+logger = logging.getLogger(__name__)
 
 
 def _to_python_scalar(x):
@@ -201,9 +205,9 @@ def report_peptide_protein_summary(peptide_counts):
 
     peptide_list = list(pd.unique(peptide_counts['Peptide']))
 
-    print(f"Number of unique peptides: {num_unique_peptides}")
-    print(f"Number of unique proteins: {num_unique_proteins}")
-    print(f"List of selected peptides: {peptide_list}")
+    logger.info("Number of unique peptides: %d", num_unique_peptides)
+    logger.info("Number of unique proteins: %d", num_unique_proteins)
+    logger.info("Selected peptides: %s", peptide_list)
 
     return summary_dict, peptide_list
 
@@ -224,6 +228,14 @@ def calculate_intra_plate_cv(pool_data: pd.DataFrame, col_name: str = 'character
     Returns:
         pd.DataFrame: DataFrame summarizing mean, std, and intra_plate_cv per group/peptide.
     """
+
+    if col_name not in pool_data.columns:
+        raise KeyError(f"Column '{col_name}' not found in pool_data")
+
+    # Select only the columns we need
+    pool_data = pool_data[[col_name, 'Peptide Sequence', 'RatioLightToHeavy']]
+    pool_data = pool_data.drop_duplicates()
+
     peptide_plate_stats = (
         pool_data.groupby([col_name, 'Peptide Sequence'])['RatioLightToHeavy']
         .agg(['mean', 'std'])
@@ -250,57 +262,67 @@ def calculate_inter_plate_cv(peptide_plate_stats):
     return peptide_means.sort_values('inter_plate_cv').reset_index(drop=True)
 
 
-def get_peptides_below_cv_percentile(peptide_means, percentile):
-    """
-    Return a list of peptide sequences with inter-plate CV
-    at or below the specified percentile.
-
-    Args:
-        peptide_means (pd.DataFrame): DataFrame with 'inter_plate_cv' and 'Peptide Sequence' columns.
-        percentile (float): Percentile threshold (between 0 and 100).
-
-    Returns:
-        np.ndarray: Array of peptide sequences meeting the criterion.
-    """
-    cv_threshold = peptide_means['inter_plate_cv'].quantile(percentile / 100.0)
-    selected_peptides = peptide_means.loc[
-        peptide_means['inter_plate_cv'] <= cv_threshold,
-        'Peptide Sequence'
-    ].unique()
-    return selected_peptides
 
 
 # ---------------------------------------------------------------------------
 # Plate Normalization
 # ---------------------------------------------------------------------------
 
-
-
-def extract_top_percentile(df, column, percentile=0.1, id_col='Peptide Sequence', source_df=None, source_col=None):
+def get_lowest_cv_peptides(interplate_cv_df, cv_percentile: float):
     """
-    Extract unique IDs from `id_col` where values in `column` are at or below the given percentile,
-    and return both the ID list and filtered DataFrame from `source_df` (if provided).
+    Return a list of peptide sequences with inter-plate CV
+    at or below the specified percentile.
+    """
+    cv_threshold = cv_percentile / 100.0
+    selected_peptides = interplate_cv_df.loc[
+        interplate_cv_df['inter_plate_cv'] <= cv_threshold,
+        'Peptide Sequence'
+    ].unique()
+    return selected_peptides
+
+def extract_top_percentile(
+    df: pd.DataFrame,
+    column: str,
+    percentile: float = 0.1,
+    id_col: str = 'Peptide Sequence',
+    source_df: pd.DataFrame = None,
+    source_col: str = None,
+):
+    """
+    DEPRECATED/MISLEADING: Use get_peptides_below_cv_percentile instead.
+
+    This function is not the correct approach for extracting peptides by percentile,
+    and its semantics (percentile as a fraction, not value) may be confusing.
+
+    Please use get_peptides_below_cv_percentile(peptide_means, percentile) for correct peptide selection.
 
     Args:
-        df (pd.DataFrame): DataFrame containing summary/statistics (e.g. interplate_cv).
-        column (str): Name of column to compute percentile threshold over (e.g. 'inter_plate_cv').
-        percentile (float): Fraction for percentile threshold (e.g. 0.1 for 10% lowest values).
-        id_col (str): Column in `df` whose unique values to extract (peptide identifier).
-        source_df (pd.DataFrame, optional): DataFrame to filter based on the returned ID list.
-        source_col (str, optional): Column of `source_df` to match IDs (default: id_col).
+        df (pd.DataFrame): DataFrame with peptide statistics.
+        column (str): Column to compute the percentile from (e.g. 'inter_plate_cv').
+        percentile (float): Percentile (as 0-100); will be interpreted as *fraction* here, which is confusing.
+        id_col (str): Column to extract IDs from (e.g. 'Peptide Sequence').
+        source_df (pd.DataFrame, optional): DataFrame to filter, matching on provided peptides.
+        source_col (str, optional): Column in source_df to match IDs (defaults to id_col).
 
     Returns:
-        tuple: (ID list, filtered DataFrame [if source_df given, else None])
+        tuple: (array of peptide IDs, filtered DataFrame if source_df is given else None)
     """
+    # Warn about function misuse
+    import warnings
+    warnings.warn(
+        "extract_top_percentile is deprecated/wrong. "
+        "Use get_peptides_below_cv_percentile instead.", 
+        DeprecationWarning
+    )
+    # This is intentionally inconsistent with percentile semantics elsewhere.
     threshold = df[column].quantile(percentile)
-    id_list = df[df[column] <= threshold][id_col].unique()
+    id_list = df.loc[df[column] <= threshold, id_col].unique()
     if source_df is not None:
         if source_col is None:
             source_col = id_col
-        filtered_df = source_df[source_df[source_col].isin(id_list)]
-        return id_list, filtered_df.reset_index(drop=True)
-    else:
-        return id_list, None
+        filtered = source_df[source_df[source_col].isin(id_list)].reset_index(drop=True)
+        return id_list, filtered
+    return id_list, None
 
 
 def plate_peptide_anova(
@@ -384,8 +406,8 @@ def plate_peptide_anova(
     model_formula = "response ~ C(Plate) + C(Peptide)"
     model = smf.ols(model_formula, data=df).fit()
     anova_res = anova_lm(model, typ=2)
-    print(model.summary())
-    print(anova_res)
+    logger.info("OLS model summary:\n%s", model.summary())
+    logger.info("Type II ANOVA table:\n%s", anova_res)
 
     def _p_from_anova(label_substr: str):
         rows = [i for i in anova_res.index if label_substr in str(i).lower()]
@@ -402,32 +424,23 @@ def plate_peptide_anova(
     plate_p = _p_from_anova("plate")
     peptide_p = _p_from_anova("peptide")
 
-    # Report p-values for factors
     if plate_p is not None and pd.notna(plate_p):
-        print(f"Plate effect p-value (Type II ANOVA): {plate_p}")
+        logger.info("Plate effect p-value (Type II ANOVA): %.4g", plate_p)
         if plate_p < 0.05:
-            print(
-                "Plate effect is significant. There is a significant effect of plate on the response. Suggesting batch correction"
-            )
+            logger.info("Plate effect is significant — batch correction recommended.")
         else:
-            print(
-                "Plate effect is not significant. There is no significant effect of plate on the response. No batch correction needed."
-            )
+            logger.info("Plate effect is not significant — no batch correction needed.")
     else:
-        print("Plate effect p-value could not be read from the ANOVA table.")
+        logger.warning("Plate effect p-value could not be read from the ANOVA table.")
 
     if peptide_p is not None and pd.notna(peptide_p):
-        print(f"Peptide effect p-value (Type II ANOVA): {peptide_p}")
+        logger.info("Peptide effect p-value (Type II ANOVA): %.4g", peptide_p)
         if peptide_p < 0.05:
-            print(
-                "Peptide effect is significant. There is a significant effect of peptide on the response."
-            )
+            logger.info("Peptide effect is significant.")
         else:
-            print(
-                "Peptide effect is not significant. There is no significant effect of peptide on the response."
-            )
+            logger.info("Peptide effect is not significant.")
     else:
-        print("Peptide effect p-value could not be read from the ANOVA table.")
+        logger.warning("Peptide effect p-value could not be read from the ANOVA table.")
 
     # Calculate conversion factors
     conv_factors_df, conversion_factors, _ = get_plate_conversion_factors(df, log_transform=log_transform)
@@ -437,50 +450,11 @@ def plate_peptide_anova(
     return model, anova_res
 
 
-
-
-def fit_plate_logratio_model(
-    df: pd.DataFrame,
-    plate_col: str = "Plate",
-    ratio_col: str = "RatioLightToHeavy",
-):
+def get_plate_conversion_factors(df, col_plate: str = "Plate", log_transform: bool = False):
     """
-    Backward-compatible helper to fit ``log_ratio ~ C(Plate)``.
+    Fit ``log_ratio ~ C(Plate)`` and return multiplicative correction factors per plate using the *global median* as the reference.
 
-    This keeps the previous public API used by notebooks and delegates to
-    :func:`get_plate_conversion_factors`.
-    """
-    work = _formula_clean_frame(df.copy())
-    if plate_col not in work.columns:
-        raise KeyError(
-            f"fit_plate_logratio_model missing plate column {plate_col!r}. "
-            f"Have: {list(work.columns)!r}"
-        )
-    if ratio_col not in work.columns:
-        raise KeyError(
-            f"fit_plate_logratio_model missing ratio column {ratio_col!r}. "
-            f"Have: {list(work.columns)!r}"
-        )
-
-    if plate_col != "Plate":
-        if "Plate" in work.columns:
-            work = work.drop(columns=["Plate"])
-        work = work.rename(columns={plate_col: "Plate"})
-
-    if ratio_col != "RatioLightToHeavy":
-        if "RatioLightToHeavy" in work.columns:
-            work = work.drop(columns=["RatioLightToHeavy"])
-        work = work.rename(columns={ratio_col: "RatioLightToHeavy"})
-
-    return get_plate_conversion_factors(work)
-
-
-def get_plate_conversion_factors(df, log_transform: bool = False):
-    """
-    Fit ``log_ratio ~ C(Plate)`` and return multiplicative correction factors per plate.
-
-    The reference plate (first when sorted) has factor ``1.0``; others are ``exp(coef)``
-    from the one-way model on ``log_ratio``.
+    Each plate's conversion factor is: median_of_all / median_of_plate, effectively scaling each plate's values to the median of all measurements.
 
     Args:
         df: DataFrame with ``Plate`` and ``log_ratio``, or ``Plate`` and
@@ -489,22 +463,23 @@ def get_plate_conversion_factors(df, log_transform: bool = False):
             in log space (equivalent to multiplicative factors on the raw ratio).
 
     Returns:
-        ``conv_factors_df``, ``conversion_factors`` dict (string plate keys), fitted model.
+        Tuple: (conv_factors_df, conversion_factors dict, None)
     """
     _ = log_transform
     work = _formula_clean_frame(df.copy())
-    if "characteristics[Plate]" in work.columns and "Plate" not in work.columns:
-        work = work.rename(columns={"characteristics[Plate]": "Plate"})
-    elif "characteristics[Plate]" in work.columns and "Plate" in work.columns:
-        work = work.drop(columns=["characteristics[Plate]"])
+    if col_plate in work.columns and col_plate != "Plate":
+        work = work.rename(columns={col_plate: "Plate"})
+    elif col_plate in work.columns and "Plate" in work.columns:
+        work = work.drop(columns=[col_plate])
     work = _formula_clean_frame(work)
 
     if "Plate" not in work.columns:
         raise ValueError(
-            f"get_plate_conversion_factors needs 'Plate' (or 'characteristics[Plate]'). "
+            f"get_plate_conversion_factors needs 'Plate' (or {col_plate}). "
             f"Have: {list(work.columns)!r}"
         )
 
+    # Plate as string categorical (for consistent grouping)
     plate = _patsy_scalar_categorical(_as_1d_series(work, "Plate")).astype(str)
 
     if "log_ratio" in work.columns:
@@ -527,29 +502,28 @@ def get_plate_conversion_factors(df, log_transform: bool = False):
         )
 
     conv_df = conv_df.dropna(subset=["log_ratio", "Plate"]).reset_index(drop=True)
-
     if conv_df.empty:
         raise ValueError("get_plate_conversion_factors: no rows left after cleaning.")
 
-    m = smf.ols("log_ratio ~ C(Plate)", data=conv_df).fit()
-    plate_effects = m.params.filter(like="C(Plate)")
-    ref_plates = conv_df["Plate"].unique()
-    ref_plates = sorted(ref_plates, key=lambda x: str(x))
-    reference_plate = str(ref_plates[0])
+    # Compute global median and per-plate medians (work in *raw* ratio space for factors)
+    # Undo log-transform for medians
+    conv_df['raw_ratio'] = np.exp(conv_df['log_ratio'])
+    global_median = conv_df['raw_ratio'].median()
+    plate_medians = conv_df.groupby('Plate')['raw_ratio'].median()
 
-    conversion_factors: dict[str, float] = {reference_plate: 1.0}
-    for term, coef in plate_effects.items():
-        plate_name = str(term.replace("C(Plate)[T.", "").replace("]", ""))
-        conversion_factors[plate_name] = float(np.exp(coef))
-
+    # Conversion factors scale each plate's median to global median
+    conversion_factors: dict[str, float] = {
+        plate: (global_median / median_val) if median_val > 0 else 1.0
+        for plate, median_val in plate_medians.items()
+    }
     conv_factors_df = pd.DataFrame(
         list(conversion_factors.items()),
         columns=["Plate", "conversion_factor"],
     )
-    print("Conversion factors for each plate (to equalize them):")
-    print(conv_factors_df)
+    logger.info("Conversion factors per plate:\n%s", conv_factors_df.to_string(index=False))
 
-    return conv_factors_df, conversion_factors, m
+    # No statsmodels model is used here (None for API compatibility)
+    return conv_factors_df, conversion_factors, None
 
 
 # ---------------------------------------------------------------------------
@@ -569,15 +543,23 @@ def adjust_ratio_by_plate(df, conversion_factors):
         pd.DataFrame: Input DataFrame with added 'RatioLightToHeavy_adj' column.
     """
     def get_factor(plate):
-        plate_str = str(int(plate)) if str(int(plate)) in conversion_factors else str(plate)
-        return conversion_factors[plate_str]
+        key = str(plate)
+        if key not in conversion_factors:
+            try:
+                key = str(int(float(plate)))
+            except (ValueError, TypeError):
+                pass
+        if key not in conversion_factors:
+            raise KeyError(
+                f"Plate {plate!r} not found in conversion_factors. "
+                f"Available plates: {list(conversion_factors.keys())}"
+            )
+        return conversion_factors[key]
 
     df = df.copy()
     df['RatioLightToHeavy_adj'] = [
         r / get_factor(p) for r, p in zip(df['RatioLightToHeavy'], df['Plate'])
     ]
-
-    # 
     return df
 
 # ---------------------------------------------------------------------------
