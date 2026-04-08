@@ -87,6 +87,9 @@ def plot_pool_boxplot(pool_df, col_ratio: str = 'RatioLightToHeavy', col_plate: 
                                Must have columns 'Replicate', 'RatioLightToHeavy', and 'characteristics[Plate]'.
     """
 
+    # Select only the columns we need
+    pool_df = pool_df[['Replicate', col_ratio, col_plate]].drop_duplicates()
+
     # Set size 12*8
     plt.figure(figsize=(12, 8))
     sns.boxplot(
@@ -104,7 +107,7 @@ def plot_pool_boxplot(pool_df, col_ratio: str = 'RatioLightToHeavy', col_plate: 
     # Remove x tick labels and marks
     plt.xticks([], [])
     plt.show()
-    
+
 
 def plot_pool_heatmap(pool_data, aggfunc: str = "mean"):
     """
@@ -155,8 +158,6 @@ def plot_intra_plate_cv_stats(peptide_plate_stats: pd.DataFrame, col_name: str =
         peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
         col_name (str): The group column used in the stats DataFrame.
     """
-    display(peptide_plate_stats.head())
-
     plt.figure(figsize=(10, 6))
     sns.boxplot(x=col_name, y='intra_plate_cv', data=peptide_plate_stats)
     plt.title('Boxplot of Intra Plate CV for Pool')
@@ -165,28 +166,24 @@ def plot_intra_plate_cv_stats(peptide_plate_stats: pd.DataFrame, col_name: str =
     plt.show()
 
 
-def plot_inter_plate_cv_kde(peptide_plate_stats):
+def plot_inter_plate_cv_kde(interplate_cv: pd.DataFrame) -> plt.Figure:
     """
     Plot a KDE of inter-plate CV for each peptide, with a vertical line at the median.
 
     Args:
-        peptide_plate_stats (pd.DataFrame): Output from calculate_intra_plate_cv.
-            Must have columns ['Peptide Sequence', 'mean'] at a minimum.
+        interplate_cv (pd.DataFrame): Output from :func:`calculate_inter_plate_cv`.
+            Must have an ``inter_plate_cv`` column.
 
     Returns:
         matplotlib.figure.Figure: The figure object containing the plot.
     """
-    peptide_means = (
-        peptide_plate_stats.groupby('Peptide Sequence')['mean']
-        .agg(['mean', 'std'])
-        .rename(columns={'mean': 'grand_mean', 'std': 'between_plate_sd'})
-        .reset_index()
-    )
-    peptide_means['inter_plate_cv'] = peptide_means['between_plate_sd'] / peptide_means['grand_mean']
-
+    if 'inter_plate_cv' not in interplate_cv.columns:
+        raise KeyError(
+            f"Expected column 'inter_plate_cv'. Found: {list(interplate_cv.columns)}"
+        )
     fig = plt.figure(figsize=(12, 6))
-    sns.kdeplot(peptide_means['inter_plate_cv'].dropna(), fill=True)
-    median_cv = peptide_means['inter_plate_cv'].median()
+    sns.kdeplot(interplate_cv['inter_plate_cv'].dropna(), fill=True)
+    median_cv = interplate_cv['inter_plate_cv'].median()
     plt.axvline(median_cv, color='red', linestyle='--', label=f'Median = {median_cv:.2f}')
     plt.title('KDE Plot of Inter-Plate CV Across Peptides')
     plt.xlabel('Inter-Plate CV')
@@ -232,23 +229,21 @@ def plot_cumulative_peptide_count_by_cv(peptide_means):
 
 
 
-def plot_logratio_by_plate_boxplot(df):
+def plot_logratio_by_plate_boxplot(df: pd.DataFrame) -> None:
     """
     Plots boxplots of log(RatioLightToHeavy) by Replicate, colored by Plate.
 
     Args:
         df (pd.DataFrame): DataFrame with columns ['Replicate', 'log_ratio', 'Plate']
     """
-    # Sort dataframe by Plate for plotting (optional)
     df_sorted = df.sort_values('Plate')
     plt.figure(figsize=(10, 6))
     sns.boxplot(x='Replicate', y='log_ratio', data=df_sorted, hue='Plate', dodge=False)
     plt.title('Boxplot of log(RatioLightToHeavy) by Replicate (colored by Plate)')
     plt.xlabel('')
     plt.ylabel('log(RatioLightToHeavy)')
-    plt.xticks([], [])  # Remove x tick labels and marks
+    plt.xticks([], [])
     plt.legend(title='Plate', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.show()
-    return df_sorted
 
