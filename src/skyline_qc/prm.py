@@ -450,81 +450,65 @@ def plate_peptide_anova(
     return model, anova_res
 
 
-def get_plate_conversion_factors(df, col_plate: str = "Plate", log_transform: bool = False):
+def get_plate_conversion_factors(
+    df,
+    col_plate: str = "Plate",
+    ratio_col: str = "RatioLightToHeavy",
+    log_transform: bool = False,
+):
     """
-    Fit ``log_ratio ~ C(Plate)`` and return multiplicative correction factors per plate using the *global median* as the reference.
-
-    Each plate's conversion factor is: median_of_all / median_of_plate, effectively scaling each plate's values to the median of all measurements.
-
-    Args:
-        df: DataFrame with ``Plate`` and ``log_ratio``, or ``Plate`` and
-            ``RatioLightToHeavy`` (positive values used; log is taken for the fit).
-        log_transform: Reserved for API compatibility; correction is always defined
-            in log space (equivalent to multiplicative factors on the raw ratio).
+    Calculate plate conversion factors for the given DataFrame.
 
     Returns:
-        Tuple: (conv_factors_df, conversion_factors dict, None)
+        conv_factors_df (pd.DataFrame): DataFrame of plate median and conversion factor.
+        conversion_factors (dict): Mapping plate -> multiplicative correction factor.
+        model: Fitted OLS model object from statsmodels.
     """
-    _ = log_transform
-    work = _formula_clean_frame(df.copy())
-    if col_plate in work.columns and col_plate != "Plate":
-        work = work.rename(columns={col_plate: "Plate"})
-    elif col_plate in work.columns and "Plate" in work.columns:
-        work = work.drop(columns=[col_plate])
-    work = _formula_clean_frame(work)
 
-    if "Plate" not in work.columns:
-        raise ValueError(
-            f"get_plate_conversion_factors needs 'Plate' (or {col_plate}). "
-            f"Have: {list(work.columns)!r}"
-        )
 
-    # Plate as string categorical (for consistent grouping)
-    plate = _patsy_scalar_categorical(_as_1d_series(work, "Plate")).astype(str)
+    # Defensive: required columns
+    cols = ['Peptide Sequence', 'Replicate', col_plate, ratio_col]
+    missing_cols = [col for col in cols if col not in df.columns]
+    if missing_cols:
+        raise KeyError(f"Missing required columns in df: {missing_cols}")
 
-    if "log_ratio" in work.columns:
-        lr = pd.to_numeric(_as_1d_series(work, "log_ratio"), errors="coerce")
-        conv_df = pd.DataFrame({"Plate": plate, "log_ratio": lr})
-    elif "RatioLightToHeavy" in work.columns:
-        ratio = pd.to_numeric(
-            _patsy_scalar_categorical(_as_1d_series(work, "RatioLightToHeavy")),
-            errors="coerce",
-        )
-        conv_df = pd.DataFrame({"Plate": plate, "RatioLightToHeavy": ratio})
-        conv_df = conv_df.dropna(subset=["Plate", "RatioLightToHeavy"])
-        conv_df = conv_df.loc[conv_df["RatioLightToHeavy"] > 0].copy()
-        conv_df["log_ratio"] = np.log(conv_df["RatioLightToHeavy"])
-        conv_df = conv_df[["Plate", "log_ratio"]]
-    else:
-        raise ValueError(
-            "get_plate_conversion_factors needs 'log_ratio' or 'RatioLightToHeavy'. "
-            f"Have: {list(work.columns)!r}"
-        )
+    # Work on a copy, drop duplicate rows
+    d = df[cols].drop_duplicates().copy()
 
-    conv_df = conv_df.dropna(subset=["log_ratio", "Plate"]).reset_index(drop=True)
-    if conv_df.empty:
-        raise ValueError("get_plate_conversion_factors: no rows left after cleaning.")
-
-    # Compute global median and per-plate medians (work in *raw* ratio space for factors)
-    # Undo log-transform for medians
-    conv_df['raw_ratio'] = np.exp(conv_df['log_ratio'])
-    global_median = conv_df['raw_ratio'].median()
-    plate_medians = conv_df.groupby('Plate')['raw_ratio'].median()
-
-    # Conversion factors scale each plate's median to global median
-    conversion_factors: dict[str, float] = {
-        plate: (global_median / median_val) if median_val > 0 else 1.0
-        for plate, median_val in plate_medians.items()
-    }
-    conv_factors_df = pd.DataFrame(
-        list(conversion_factors.items()),
-        columns=["Plate", "conversion_factor"],
+    # Compute ratio_fit, handle coercion, log if requested
+    d = d.assign(
+        ratio_fit=pd.to_numeric(d[ratio_col], errors='coerce')
     )
-    logger.info("Conversion factors per plate:\n%s", conv_factors_df.to_string(index=False))
+    if log_transform:
+        d['ratio_fit'] = np.log(d['ratio_fit'])
 
-    # No statsmodels model is used here (None for API compatibility)
-    return conv_factors_df, conversion_factors, None
+    # Construct formula: always reference everything with Q()
+    model_formula = f'ratio_fit ~ C(Q("{col_plate}")) + C(Q("Peptide Sequence"))'
+    model = smf.ols(model_formula, data=d).fit()
+    anova_res = anova_lm(model, typ=2)
 
+    # Platemedians: median ratio_fit for each plate
+    platemed = (
+        d.groupby(col_plate, dropna=True, observed=True)['ratio_fit']
+        .median()
+        .reset_index()
+        .rename(columns={'ratio_fit': 'plate_median'})
+    )
+
+    # Global peptide median (used as normalization target)
+    global_median = d['ratio_fit'].median()
+
+    # Correction factor: for each plate = global median / plate median
+    platemed['correction_factor'] = global_median / platemed['plate_median'] 
+
+    # Return as dict: keys must match how Plate appears in the DataFrame
+    conversion_factors = {
+        str(row[col_plate]): row['correction_factor']
+        for _, row in platemed.iterrows()
+    }
+
+    # For reproducibility, also output the DataFrame form
+    return platemed, conversion_factors, model
 
 # ---------------------------------------------------------------------------
 # Plate Normalization
@@ -557,8 +541,10 @@ def adjust_ratio_by_plate(df, conversion_factors):
         return conversion_factors[key]
 
     df = df.copy()
+
+    # Factor is median_global/median_plate, so we multiply by the factor to get the adjusted ratio
     df['RatioLightToHeavy_adj'] = [
-        r / get_factor(p) for r, p in zip(df['RatioLightToHeavy'], df['Plate'])
+        r * get_factor(p) for r, p in zip(df['RatioLightToHeavy'], df['Plate'])
     ]
     return df
 
@@ -592,17 +578,14 @@ def compute_cv(
         if col not in df.columns:
             raise KeyError(f"Column '{col}' not found in DataFrame.")
 
-    result = (
-        df.groupby(group_by)[value_col]
-        .agg(
-            mean="mean",
-            std="std",
-            n="count",
-        )
-        .reset_index()
-    )
+    grouped = df.groupby(group_by)[value_col]
+    result = grouped.agg(['mean', 'std', 'count']).reset_index()
+    result = result.rename(columns={'count': 'n'})
+    # Handle division by zero for mean == 0
     result["cv_pct"] = (result["std"] / result["mean"]).abs() * 100
-    return result.sort_values("cv_pct").reset_index(drop=True)
+    result.loc[result["mean"].abs() < 1e-12, "cv_pct"] = float("nan")
+    result = result[[group_by, 'mean', 'std', 'cv_pct', 'n']]
+    return result.sort_values("cv_pct", na_position='last').reset_index(drop=True)
 
 
 def flag_missing_values(
@@ -638,14 +621,17 @@ def flag_missing_values(
         aggfunc="first",
     )
 
+    # Detected means not NA and not exactly zero (to ignore missing and zero/failed quant.)
     detected = pivot.notna() & (pivot != 0)
-    n_total = pivot.shape[1]
+    n_total = len(pivot.columns)
 
-    pivot["n_detected"] = detected.sum(axis=1)
-    pivot["n_total"] = n_total
-    pivot["detection_rate"] = pivot["n_detected"] / n_total
-
-    return pivot.reset_index().sort_values("detection_rate").reset_index(drop=True)
+    summary = pd.DataFrame({
+        precursor_col: pivot.index,
+        "n_detected": detected.sum(axis=1).values,
+        "n_total": n_total,
+    })
+    summary["detection_rate"] = summary["n_detected"] / n_total
+    return summary.sort_values("detection_rate").reset_index(drop=True)
 
 
 def dot_product_summary(
@@ -675,6 +661,11 @@ def dot_product_summary(
     for col in (lib_dot_col, ratio_dot_col):
         if col not in df.columns:
             raise KeyError(f"Column '{col}' not found in DataFrame.")
+
+    req_cols = ["Precursor", "Replicate"]
+    missing_cols = [c for c in req_cols if c not in df.columns]
+    if missing_cols:
+        raise KeyError(f"Required columns for dot_product_summary missing: {missing_cols}")
 
     cols = ["Precursor", "Replicate", lib_dot_col, ratio_dot_col]
     result = df[cols].copy()
@@ -709,7 +700,13 @@ def retention_time_deviation(
         if col not in df.columns:
             raise KeyError(f"Column '{col}' not found in DataFrame.")
 
-    result = df[["Precursor", "Replicate", observed_col, predicted_col]].copy()
+    base_cols = []
+    for base in ["Precursor", "Replicate"]:
+        if base in df.columns:
+            base_cols.append(base)
+    base_cols += [observed_col, predicted_col]
+
+    result = df[base_cols].copy()
     result = result.rename(
         columns={observed_col: "rt_observed", predicted_col: "rt_predicted"}
     )
@@ -743,17 +740,17 @@ def summarize_prm(
         ``n_precursors``, ``n_replicates``, ``pct_dot_pass``, ``pct_rt_within``, ``median_cv_pct``.
     """
     cv_df = compute_cv(df, value_col=cv_col)
-    missing_df = flag_missing_values(df)
+    missing_df = flag_missing_values(df, value_col=cv_col)
     dot_df = dot_product_summary(
         df, lib_threshold=lib_threshold, ratio_threshold=ratio_threshold
     )
     rt_df = retention_time_deviation(df)
 
-    n_precursors = df["Precursor"].nunique()
-    n_replicates = df["Replicate"].nunique()
-    pct_dot_pass = dot_df["both_pass"].mean() * 100
-    pct_rt_within = (rt_df["abs_rt_dev"] <= rt_dev_threshold).mean() * 100
-    median_cv = cv_df["cv_pct"].median()
+    n_precursors = df["Precursor"].nunique() if "Precursor" in df.columns else None
+    n_replicates = df["Replicate"].nunique() if "Replicate" in df.columns else None
+    pct_dot_pass = dot_df["both_pass"].mean() * 100 if len(dot_df) > 0 else float("nan")
+    pct_rt_within = (rt_df["abs_rt_dev"] <= rt_dev_threshold).mean() * 100 if len(rt_df) > 0 else float("nan")
+    median_cv = cv_df["cv_pct"].median() if len(cv_df) > 0 else float("nan")
 
     return {
         "cv": cv_df,
@@ -762,7 +759,7 @@ def summarize_prm(
         "rt_deviation": rt_df,
         "n_precursors": n_precursors,
         "n_replicates": n_replicates,
-        "pct_dot_pass": round(pct_dot_pass, 2),
-        "pct_rt_within": round(pct_rt_within, 2),
-        "median_cv_pct": round(median_cv, 2),
+        "pct_dot_pass": round(pct_dot_pass, 2) if pd.notnull(pct_dot_pass) else None,
+        "pct_rt_within": round(pct_rt_within, 2) if pd.notnull(pct_rt_within) else None,
+        "median_cv_pct": round(median_cv, 2) if pd.notnull(median_cv) else None,
     }

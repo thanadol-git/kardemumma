@@ -57,6 +57,8 @@ from __future__ import annotations
 import os
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def import_openswath_file(file_path: str, remove_file_path: bool = False) -> pd.DataFrame:
     """
@@ -136,10 +138,60 @@ def filter_best_peak_group(df: pd.DataFrame, threshold: float = 0.95) -> pd.Data
         pd.DataFrame: The filtered OpenSWATH results DataFrame.
     """
 
-    # Remove decoys
-    df = df[df['decoy'] == 0]
+    # If FullPeptideName contains `K(UniMod:259)` or `R(UniMod:267)` add new column `Isotope Label Type` with value `heavy` else 'light'
+    df['Isotope Label Type'] = df['FullPeptideName'].apply(lambda x: 'heavy' if 'K(UniMod:259)' in x or 'R(UniMod:267)' in x else 'light')
 
-    # Remove rows where VAR_LIBRARY_DOTPROD is less than the threshold
+
+    # Remove decoys
+    df = df[df['decoy'].astype(str) == '0']
+
+    # # Remove rows where VAR_LIBRARY_DOTPROD is less than the threshold
+    # df = df[df['VAR_LIBRARY_DOTPROD'] >= threshold]
+
+    # Filter Peak group rank = 1
+    df = df[df['peak_group_rank'] == 1]
+
+    # Filter dotprod > threshold
     df = df[df['VAR_LIBRARY_DOTPROD'] >= threshold]
 
+    # Group by filename, Sequence, transition_group_id
+    df = df.groupby(['filename', 'Sequence', 'transition_group_id']).agg({
+        'VAR_LIBRARY_DOTPROD': 'mean',
+        'Isotope Label Type': 'first'
+    }).reset_index()
+
+    # Arrange by filename, Sequene, transition_group_id
+    df = df.sort_values(['filename', 'Sequence', 'transition_group_id'])
+
+
     return df.reset_index(drop=True)
+
+def plot_dotprod_kde(df: pd.DataFrame) -> None:
+    """
+    Plot the KDE of VAR_LIBRARY_DOTPROD for each Isotope Label Type
+    """
+    
+    plt.figure(figsize=(10, 6))
+    # Use long-form DataFrame with explicit x and hue
+    sns.kdeplot(
+        data=df,
+        x='VAR_LIBRARY_DOTPROD',
+        hue='Isotope Label Type',
+        fill=True,
+        common_norm=False,
+        alpha=0.6
+    )
+    plt.title('KDE of VAR_LIBRARY_DOTPROD by Isotope Label Type')
+    plt.xlabel('VAR_LIBRARY_DOTPROD')
+    plt.legend()
+    plt.show()
+
+def calculate_ratio(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate the ratio of heavy to light for each transition_group_id
+    """
+
+    group_col = ['filename', ]
+    # Group by transition_group_id
+    df = df.groupby('transition_group_id')
+    return df
