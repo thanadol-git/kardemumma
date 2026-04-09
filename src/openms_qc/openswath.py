@@ -275,7 +275,7 @@ def _select_ions_channel(df: pd.DataFrame) -> pd.DataFrame:
     # Check for missing columns
     return df.reset_index(drop=True)
 
-def count_ions_channel(df: pd.DataFrame) -> pd.DataFrame:   
+def _summarise_ions_channel(df: pd.DataFrame) -> pd.DataFrame:   
     """
     Count the number of ions in each channel per peptide in each file.
     """
@@ -290,7 +290,34 @@ def count_ions_channel(df: pd.DataFrame) -> pd.DataFrame:
         .reset_index(name='n_ions')
     )
 
-    # Pivot Isotop Label Type to columns and values are n_ions
-    # df_count = df_count.pivot(index=['filename', 'Sequence', 'Charge'], columns='Isotope Label Type', values='n_ions')
-    
     return df_count.reset_index(drop=True)
+
+def count_ions_channel(df: pd.DataFrame) -> pd.DataFrame:
+
+    df_count = _summarise_ions_channel(df)
+    # Pivot Isotope Label Type to columns and values are n_ions
+    df_count = df_count.pivot_table(index=['ProteinId', 'Sequence', 'Charge'], columns='Isotope Label Type', values='n_ions', fill_value=0)
+    df_count = df_count.reset_index()
+
+    return df_count
+
+def plot_ions_channel(df: pd.DataFrame) -> None:
+    """
+    Plot the number of ions in each channel per peptide in each file.
+    """
+
+    # Count the number of ions in each channel per peptide in each file
+    df_count = count_ions_channel(df)
+    
+    group_col = ['heavy', 'light']
+    df_count = df_count.groupby(group_col).size().reset_index(name='count')
+    df_count = df_count.reset_index()
+
+    # Plot dot plot where heavy is on x axis and light is on y axis and color by count
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(x='heavy', y='light', data=df_count, hue='count')
+    plt.title('Dot plot of heavy vs. light ions')
+    plt.xlabel('Heavy')
+    plt.ylabel('Light')
+    plt.show()
+    return df_count

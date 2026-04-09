@@ -4,7 +4,8 @@ from .openswath import (
     plot_dotprod_kde,
     pair_ions_matching,
     remove_precursor, 
-    count_ions_channel
+    count_ions_channel, 
+    plot_ions_channel
 )
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "plot_dotprod_kde",
     "pair_ions_matching",
     "remove_precursor",
-    "count_ions_channel"
+    "count_ions_channel", 
+    "plot_ions_channel"
 ]
