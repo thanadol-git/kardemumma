@@ -208,19 +208,89 @@ def plot_dotprod_kde(df: pd.DataFrame) -> None:
 # Extract RT (later)
 
 
-def calculate_ratio(df: pd.DataFrame) -> pd.DataFrame:
+def pair_ions_matching(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate the ratio of heavy to light for each transition_group_id
+    Calculate heavy/light intensity ratio per peptide in each file.
     """
-    
-    # Select group_col
-    group_col = ['filename', 'ProteinId', 'Sequence',  'Isotope Label Type']
-    
-    # Pivot intensity byu group_col
-    df = df.pivot_table(index=group_col, columns='Isotope Label Type', values='Intensity').reset_index()
 
+    # Some inputs can contain duplicated column names (e.g. two "Isotope Label Type"
+    # columns), which makes pandas groupby/pivot fail with "not 1-dimensional".
+    if df.columns.duplicated().any():
+        df = df.loc[:, ~df.columns.duplicated()].copy()
+
+    required_columns = ['filename', 'ProteinId', 'Sequence', 'Charge', 'Isotope Label Type', 'Intensity']
+    
+    # Check for missing columns
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Missing required columns for ratio calculation: {missing_columns}")
+
+    # Use peptide identity as index and pivot isotope label to columns.
+    group_col = ['filename', 'ProteinId', 'Sequence', 'Charge']
+    df = (
+        df.pivot_table(
+            index=group_col,
+            columns='Isotope Label Type',
+            values='Intensity',
+            aggfunc='sum',
+        )
+        .reset_index()
+    )
+
+    # Ensure expected isotope columns exist even if one class is absent.
+    if 'heavy' not in df.columns:
+        df['heavy'] = np.nan
+    if 'light' not in df.columns:
+        df['light'] = np.nan
+
+    df['ratio_heavy_light'] = df['heavy'] / df['light']
 
     # Sort by filename, Sequence
     df = df.sort_values(['filename', 'Sequence'])
-
     return df
+
+# ================================
+# Counting ions channel
+# ================================
+
+def _select_ions_channel(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Count the number of ions in each channel per peptide in each file.
+    Input should be in the same format that get from OpenSWATH analysis. Row filtering is applied in the function.
+    """
+
+    required_columns = ['filename', 'ProteinId', 'Sequence', 'Charge', 'Isotope Label Type', 'Intensity']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Missing required columns for count calculation: {missing_columns}")
+
+    # Summarise count of Isotope Label Type for each peptide in each file and charge
+    df = (
+        df.groupby(['filename', 'ProteinId', 'Sequence', 'Charge', 'Isotope Label Type'], as_index=False)
+        .agg(n_ions=('Intensity', 'sum'))
+    )
+
+    # Sort by filename, Sequence, Charge
+    df = df.sort_values(['filename', 'Sequence', 'Charge', 'Isotope Label Type'])
+    # Check for missing columns
+    return df.reset_index(drop=True)
+
+def count_ions_channel(df: pd.DataFrame) -> pd.DataFrame:   
+    """
+    Count the number of ions in each channel per peptide in each file.
+    """
+
+    df = _select_ions_channel(df)
+
+    group_col = ['ProteinId', 'Sequence', 'Charge', 'Isotope Label Type']
+    # Count the number of rows (ions) in each channel per peptide in each file
+    df_count = (
+        df.groupby(group_col)
+        .size() # count the number of rows (ions) in each channel per peptide in each file
+        .reset_index(name='n_ions')
+    )
+
+    # Pivot Isotop Label Type to columns and values are n_ions
+    # df_count = df_count.pivot(index=['filename', 'Sequence', 'Charge'], columns='Isotope Label Type', values='n_ions')
+    
+    return df_count.reset_index(drop=True)
