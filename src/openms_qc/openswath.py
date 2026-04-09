@@ -143,22 +143,25 @@ def filter_best_peak_group(df: pd.DataFrame, threshold: float = 0.95) -> pd.Data
 
 
     # Remove decoys
+    print(f"Removing decoys: >")
     df = df[df['decoy'].astype(str) == '0']
 
     # # Remove rows where VAR_LIBRARY_DOTPROD is less than the threshold
     # df = df[df['VAR_LIBRARY_DOTPROD'] >= threshold]
 
     # Filter Peak group rank = 1
+    print(f"Filtering Peak group rank = 1: >")
     df = df[df['peak_group_rank'] == 1]
 
     # Filter dotprod > threshold
+    print(f"Filtering dotprod > threshold: {threshold}")
     df = df[df['VAR_LIBRARY_DOTPROD'] >= threshold]
 
-    # Group by filename, Sequence, transition_group_id
-    df = df.groupby(['filename', 'Sequence', 'transition_group_id']).agg({
-        'VAR_LIBRARY_DOTPROD': 'mean',
-        'Isotope Label Type': 'first'
-    }).reset_index()
+    # # Group by filename, Sequence, transition_group_id
+    # df = df.groupby(['filename', 'Sequence', 'transition_group_id']).agg({
+    #     'VAR_LIBRARY_DOTPROD': 'mean',
+    #     'Isotope Label Type': 'first'
+    # }).reset_index()
 
     # Arrange by filename, Sequene, transition_group_id
     df = df.sort_values(['filename', 'Sequence', 'transition_group_id'])
