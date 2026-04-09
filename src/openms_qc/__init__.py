@@ -5,7 +5,10 @@ from .openswath import (
     pair_ions_matching,
     remove_precursor, 
     count_ions_channel, 
-    plot_ions_channel
+    plot_ions_channel, 
+    filter_ions_channel,
+    filter_from_peptides,
+    get_ratio
 )
 
 __all__ = [
@@ -15,5 +18,8 @@ __all__ = [
     "pair_ions_matching",
     "remove_precursor",
     "count_ions_channel", 
-    "plot_ions_channel"
+    "plot_ions_channel", 
+    "filter_ions_channel",
+    "filter_from_peptides",
+    "get_ratio"
 ]

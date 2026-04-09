@@ -301,23 +301,94 @@ def count_ions_channel(df: pd.DataFrame) -> pd.DataFrame:
 
     return df_count
 
+def _summarise_ions_channel_count(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Summarise the number of ions in each channel per peptide in each file.
+    """
+      # Count the number of ions in each channel per peptide in each file
+    df_count = count_ions_channel(df)
+    
+    group_col = ['heavy', 'light']
+    df_count = df_count.groupby(group_col).size().reset_index(name='count')
+    # Remove column index
+    df_count = df_count.reset_index(drop=True)
+
+    return df_count
+
 def plot_ions_channel(df: pd.DataFrame) -> None:
     """
     Plot the number of ions in each channel per peptide in each file.
     """
 
-    # Count the number of ions in each channel per peptide in each file
-    df_count = count_ions_channel(df)
-    
-    group_col = ['heavy', 'light']
-    df_count = df_count.groupby(group_col).size().reset_index(name='count')
-    df_count = df_count.reset_index()
+    df = _summarise_ions_channel_count(df)
 
     # Plot dot plot where heavy is on x axis and light is on y axis and color by count
     plt.figure(figsize=(10, 6))
-    sns.scatterplot(x='heavy', y='light', data=df_count, hue='count')
+    sns.scatterplot(x='heavy', y='light', data=df, hue='count')
     plt.title('Dot plot of heavy vs. light ions')
     plt.xlabel('Heavy')
     plt.ylabel('Light')
     plt.show()
-    return df_count
+    return df
+
+def filter_ions_channel(df: pd.DataFrame, light_cutoff: int , heavy_cutoff: int ) -> pd.DataFrame:
+
+    df = count_ions_channel(df)
+
+    df = df[df['light'] >= light_cutoff]
+    df = df[df['heavy'] >= heavy_cutoff]
+
+    # Select Sequence and Charge
+    df = df[['Sequence', 'Charge']]
+    df = df.drop_duplicates()
+
+    return df
+# ========================================================
+# Extracting ratio
+# ========================================================
+def filter_from_peptides(df: pd.DataFrame, peptides: pd.DataFrame) -> pd.DataFrame: 
+    """
+    Inner join df with peptides on Sequence and Charge
+    """
+    df = df.merge(peptides, on=['Sequence', 'Charge'], how='inner')
+    return df.reset_index(drop=True)
+
+def get_ratio(df: pd.DataFrame, level: str = 'peptide') -> pd.DataFrame:
+    """
+    Calculate the ratio of heavy to light ions
+    """
+
+    # check if level is valid
+    valid_levels = ['peptide', 'precursor']
+    if level not in valid_levels:
+        raise ValueError(f"Invalid level: {level}. Valid levels are: {valid_levels}")
+
+    # Summarise signal quant by level of grouping
+    if level == 'peptide':
+        group_col = ['filename', 'ProteinId', 'Sequence', 'Isotope Label Type']
+    elif level == 'precursor':
+        group_col = ['filename', 'ProteinId', 'Sequence', 'Charge', 'Isotope Label Type']
+    else:
+        raise ValueError(f"Invalid level: {level}")
+
+    df = df.groupby(group_col).agg({'Intensity': 'sum'}).reset_index()
+
+    # Spread Isotope Label Type to columns
+    # Remove Isotope Label Type from group_col
+    spread_col = list(group_col)
+    spread_col.remove('Isotope Label Type')
+    
+    df = df.pivot_table(index=spread_col, columns='Isotope Label Type', values='Intensity')
+    df = df.reset_index()
+
+    # Remove row with NA in heavy or light
+    df = df.dropna(subset=['heavy', 'light'])
+    
+    # Calculate ratio of heavy to light
+    df['ratio_heavy_light'] = df['heavy'] / df['light']
+    
+
+    # Sort by filename, Sequence
+    df = df.sort_values(['filename', 'Sequence'])
+    return df
+
