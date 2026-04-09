@@ -3,6 +3,7 @@ from .openswath import (
     filter_best_peak_group,
     plot_dotprod_kde,
     calculate_ratio,
+    remove_precursor
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "filter_best_peak_group",
     "plot_dotprod_kde",
     "calculate_ratio",
+    "remove_precursor"
 ]

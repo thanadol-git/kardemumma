@@ -143,18 +143,18 @@ def filter_best_peak_group(df: pd.DataFrame, threshold: float = 0.95) -> pd.Data
 
 
     # Remove decoys
-    print(f"Removing decoys: >")
+    print(f"** Removing decoys **")
     df = df[df['decoy'].astype(str) == '0']
 
     # # Remove rows where VAR_LIBRARY_DOTPROD is less than the threshold
     # df = df[df['VAR_LIBRARY_DOTPROD'] >= threshold]
 
     # Filter Peak group rank = 1
-    print(f"Filtering Peak group rank = 1: >")
+    print(f"** Filtering Peak group rank = 1 **")
     df = df[df['peak_group_rank'] == 1]
 
     # Filter dotprod > threshold
-    print(f"Filtering dotprod > threshold: {threshold}")
+    print(f"** Filtering dotprod > threshold: {threshold} **")
     df = df[df['VAR_LIBRARY_DOTPROD'] >= threshold]
 
     # # Group by filename, Sequence, transition_group_id
@@ -164,10 +164,26 @@ def filter_best_peak_group(df: pd.DataFrame, threshold: float = 0.95) -> pd.Data
     # }).reset_index()
 
     # Arrange by filename, Sequene, transition_group_id
-    df = df.sort_values(['filename', 'Sequence', 'transition_group_id'])
-
+    # df = df.sort_values(['filename', 'Sequence', 'transition_group_id'])
+    df = df.sort_values(['filename', 'Sequence'])
 
     return df.reset_index(drop=True)
+
+def remove_precursor(df: pd.DataFrame, charges = list[int]):
+    """
+    Remove precursors with charges not in the list
+    """
+    total_precursors = df.shape[0]
+    print(f"** Total precursors: {total_precursors} **")
+    print(f"** Removing precursors with charges not in the list: {charges} **")
+    
+    # Removing
+    df = df[df['Charge'].isin(charges)]
+
+    after_total_precursors = df.shape[0]
+    print(f"** After removing precursors with charges not in the list: {after_total_precursors} **")
+    return df.reset_index(drop=True)    
+
 
 def plot_dotprod_kde(df: pd.DataFrame) -> None:
     """
@@ -189,12 +205,22 @@ def plot_dotprod_kde(df: pd.DataFrame) -> None:
     plt.legend()
     plt.show()
 
+# Extract RT (later)
+
+
 def calculate_ratio(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate the ratio of heavy to light for each transition_group_id
     """
+    
+    # Select group_col
+    group_col = ['filename', 'ProteinId', 'Sequence',  'Isotope Label Type']
+    
+    # Pivot intensity byu group_col
+    df = df.pivot_table(index=group_col, columns='Isotope Label Type', values='Intensity').reset_index()
 
-    group_col = ['filename', ]
-    # Group by transition_group_id
-    df = df.groupby('transition_group_id')
+
+    # Sort by filename, Sequence
+    df = df.sort_values(['filename', 'Sequence'])
+
     return df
