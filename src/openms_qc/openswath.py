@@ -383,10 +383,12 @@ def get_ratio(df: pd.DataFrame, level: str = 'peptide') -> pd.DataFrame:
 
     # Remove row with NA in heavy or light
     df = df.dropna(subset=['heavy', 'light'])
-    
+
     # Calculate ratio of heavy to light
     df['ratio_heavy_light'] = df['heavy'] / df['light']
     
+    # Round ratio_heavy_light to 4 decimal places
+    df['ratio_heavy_light'] = df['ratio_heavy_light'].round(4)
 
     # Sort by filename, Sequence
     df = df.sort_values(['filename', 'Sequence'])
