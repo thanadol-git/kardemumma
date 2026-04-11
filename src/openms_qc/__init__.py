@@ -7,7 +7,6 @@ from .openswath import (
     count_ions_channel, 
     plot_ions_channel, 
     filter_ions_channel,
-    filter_from_peptides,
     get_ratio
 )
 
@@ -20,6 +19,5 @@ __all__ = [
     "count_ions_channel", 
     "plot_ions_channel", 
     "filter_ions_channel",
-    "filter_from_peptides",
     "get_ratio"
 ]
