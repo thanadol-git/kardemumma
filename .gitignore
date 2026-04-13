@@ -6,6 +6,7 @@
 env
 data
 results
+plot
 export
 .venv
 openms
