@@ -497,13 +497,8 @@ def get_ratio(df: pd.DataFrame, level: str = 'peptide') -> pd.DataFrame:
 
     # Remove row with NA in heavy or light
     df = df.dropna(subset=['heavy', 'light'])
-
-    # Calculate ratio of heavy to light
-    df['ratio_heavy_light'] = df['heavy'] / df['light']
-    
-    # Round ratio_heavy_light to 4 decimal places
-    df['ratio_heavy_light'] = df['ratio_heavy_light'].round(4)
-
+    # Compute and round ratio of light to heavy in a single, elegant line
+    df['ratio_light_to_heavy'] = (df['light'] / df['heavy']).round(4)
 
     # Reset index
     df = df.reset_index(drop=True)
