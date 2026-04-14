@@ -123,7 +123,7 @@ def _extract_modification_location(FullPeptideName: str, Sequence: str, UniMod: 
     return mod_positions
 
    
-def _n_term_acetylation_annotation(FullPeptideName: str) -> bool:
+def _n_term_acetylation_annotation(FullPeptideName: str) -> str:
     """
     Annotate N-Term acetylation
     """
@@ -177,11 +177,7 @@ def import_openswath_file(file_path: str, remove_file_path: bool = False) -> pd.
         'VAR_LIBRARY_RMSD',
         'VAR_LIBRARY_ROOTMEANSQUARE',
         'VAR_LIBRARY_SANGLE',
-        'VAR_LIBRARY_DOTPROD',
-        'VAR_LIBRARY_CORR',
-        'VAR_LIBRARY_MANHATTAN',
-        'VAR_LIBRARY_RMSD',
-    ]   
+    ] 
     missing_columns = [col for col in expected_columns if col not in df.columns]
     if missing_columns: 
         raise ValueError(f"The file {file_path} is missing expected columns: {missing_columns}. "
@@ -267,10 +263,13 @@ def filter_best_peak_group(df: pd.DataFrame, threshold: float = 0.95) -> pd.Data
 
     return df.reset_index(drop=True)
 
-def remove_precursor(df: pd.DataFrame, charges = list[int]):
+def remove_precursor(df: pd.DataFrame, charges: list[int] | None = None):
     """
     Remove precursors with charges not in the list
     """
+    if charges is None:
+        charges = [2, 3]
+
     total_precursors = df.shape[0]
     print(f"** Total precursors: {total_precursors} **")
     print(f"** Removing precursors with charges not in the list: {charges} **")
@@ -398,8 +397,8 @@ def count_ions_channel(df: pd.DataFrame) -> pd.DataFrame:
     df_count = df_count.reset_index()
 
 
-    # Sort by Sequence
-    df_count = df_count.sort_values(['Sequence'])
+    # Sort by filename, Sequence
+    df_count = df_count.sort_values(['filename', 'Sequence'])
     return df_count
 
 def _summarise_ions_channel_count(df: pd.DataFrame) -> pd.DataFrame:
