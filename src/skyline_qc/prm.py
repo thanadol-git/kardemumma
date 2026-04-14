@@ -262,11 +262,10 @@ def calculate_inter_plate_cv(peptide_plate_stats):
     return peptide_means.sort_values('inter_plate_cv').reset_index(drop=True)
 
 
-
-
 # ---------------------------------------------------------------------------
 # Plate Normalization
 # ---------------------------------------------------------------------------
+
 
 def get_lowest_cv_peptides(interplate_cv_df, cv_percentile: float):
     """
@@ -289,32 +288,23 @@ def extract_top_percentile(
     source_col: str = None,
 ):
     """
-    DEPRECATED/MISLEADING: Use get_peptides_below_cv_percentile instead.
-
-    This function is not the correct approach for extracting peptides by percentile,
-    and its semantics (percentile as a fraction, not value) may be confusing.
-
-    Please use get_peptides_below_cv_percentile(peptide_means, percentile) for correct peptide selection.
+    Return IDs from ``id_col`` whose ``column`` value is at or below the given
+    quantile, and optionally filter a source DataFrame to those IDs.
 
     Args:
-        df (pd.DataFrame): DataFrame with peptide statistics.
-        column (str): Column to compute the percentile from (e.g. 'inter_plate_cv').
-        percentile (float): Percentile (as 0-100); will be interpreted as *fraction* here, which is confusing.
-        id_col (str): Column to extract IDs from (e.g. 'Peptide Sequence').
-        source_df (pd.DataFrame, optional): DataFrame to filter, matching on provided peptides.
-        source_col (str, optional): Column in source_df to match IDs (defaults to id_col).
+        df: DataFrame with peptide statistics (e.g. output of :func:`calculate_inter_plate_cv`).
+        column: Column to compute the quantile threshold from (e.g. ``'inter_plate_cv'``).
+        percentile: Quantile threshold as a fraction in [0, 1] (e.g. ``0.1`` for the
+            lowest 10% of values).
+        id_col: Column whose unique values to extract (default ``'Peptide Sequence'``).
+        source_df: If given, filter this DataFrame to rows whose ``source_col`` is in
+            the returned ID list.
+        source_col: Column of ``source_df`` to match against IDs (defaults to ``id_col``).
 
     Returns:
-        tuple: (array of peptide IDs, filtered DataFrame if source_df is given else None)
+        tuple: ``(id_array, filtered_df)``; ``filtered_df`` is ``None`` if ``source_df``
+        is not provided.
     """
-    # Warn about function misuse
-    import warnings
-    warnings.warn(
-        "extract_top_percentile is deprecated/wrong. "
-        "Use get_peptides_below_cv_percentile instead.", 
-        DeprecationWarning
-    )
-    # This is intentionally inconsistent with percentile semantics elsewhere.
     threshold = df[column].quantile(percentile)
     id_list = df.loc[df[column] <= threshold, id_col].unique()
     if source_df is not None:
@@ -329,7 +319,6 @@ def plate_peptide_anova(
     selected_norm_peptides,
     plate_col: str = "characteristics[Plate]",
     log_transform: bool = False,
-    return_conversion: bool = False,
 ):
     """
     Fit a two-way ANOVA on ratio ~ plate + peptide.
@@ -341,12 +330,9 @@ def plate_peptide_anova(
         log_transform: If True, model ``log(RatioLightToHeavy)`` (only rows with ratio > 0).
 
     Returns:
-        By default: ``model`` (statsmodels OLS result), ``anova_res`` (Type II ANOVA table).
-        If ``return_conversion=True``: also returns
-        ``conv_factors_df`` and ``conversion_factors``.
+        ``model`` (statsmodels OLS result), ``anova_res`` (Type II ANOVA table).
 
-    See :func:`get_plate_conversion_factors` for plate correction factors (e.g. on the
-    dataframe returned by :func:`fit_plate_logratio_model`).
+    See :func:`get_plate_conversion_factors` for plate correction factors.
     """
     df = _formula_clean_frame(selected_norm_peptides.copy())
 
@@ -442,11 +428,6 @@ def plate_peptide_anova(
     else:
         logger.warning("Peptide effect p-value could not be read from the ANOVA table.")
 
-    # Calculate conversion factors
-    conv_factors_df, conversion_factors, _ = get_plate_conversion_factors(df, log_transform=log_transform)
-
-    if return_conversion:
-        return model, anova_res, conv_factors_df, conversion_factors
     return model, anova_res
 
 
@@ -464,8 +445,6 @@ def get_plate_conversion_factors(
         conversion_factors (dict): Mapping plate -> multiplicative correction factor.
         model: Fitted OLS model object from statsmodels.
     """
-
-
     # Defensive: required columns
     cols = ['Peptide Sequence', 'Replicate', col_plate, ratio_col]
     missing_cols = [col for col in cols if col not in df.columns]
@@ -485,9 +464,8 @@ def get_plate_conversion_factors(
     # Construct formula: always reference everything with Q()
     model_formula = f'ratio_fit ~ C(Q("{col_plate}")) + C(Q("Peptide Sequence"))'
     model = smf.ols(model_formula, data=d).fit()
-    anova_res = anova_lm(model, typ=2)
 
-    # Platemedians: median ratio_fit for each plate
+    # Plate medians: median ratio_fit for each plate
     platemed = (
         d.groupby(col_plate, dropna=True, observed=True)['ratio_fit']
         .median()

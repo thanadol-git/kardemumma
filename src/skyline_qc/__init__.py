@@ -20,6 +20,7 @@ from .prm import (
     calculate_intra_plate_cv,
     calculate_inter_plate_cv,
     get_lowest_cv_peptides,
+    extract_top_percentile,
     # Plate Normalization
     plate_peptide_anova,
     get_plate_conversion_factors,
@@ -64,6 +65,7 @@ __all__ = [
     "calculate_intra_plate_cv",
     "calculate_inter_plate_cv",
     "get_lowest_cv_peptides",
+    "extract_top_percentile",
     # Plate Normalization
     "plate_peptide_anova",
     "get_plate_conversion_factors",
