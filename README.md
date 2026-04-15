@@ -4,7 +4,7 @@
 
 This repository contains the Python package for processing and quality-checking targeted mass spectrometry outputs (for example Skyline/OpenSWATH-style exports).
 
-> Current repository name is still `skyline_qc`; package/repository renaming can be done separately.
+> The current repository name is still `skyline_qc`; this will be updated to `kardemumma` in a future renaming step.
 
 ## Installation
 
@@ -12,8 +12,8 @@ You can install the dependencies and set up the environment using [Conda](https:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/thanadol-git/skyline_qc.git
-   cd skyline_qc
+   git clone https://github.com/thanadol-git/kardemumma.git
+   cd kardemumma
    ```
 
 2. Create the environment using the provided `environment.yml` file:
