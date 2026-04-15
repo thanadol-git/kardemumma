@@ -1,6 +1,10 @@
-# skyline_qc
+# KARDEMUMMA
 
-This will be a simple Python package to clean up Skyline results. 
+**KARDEMUMMA** stands for **K**ey **A**nalysis of **R**eproducible **D**ata for **E**fficient **M**onitoring in **U**nified **M**ass **S**pectrometry **M**ethods and **A**ssays.
+
+This repository contains the Python package for processing and quality-checking targeted mass spectrometry outputs (for example Skyline/OpenSWATH-style exports).
+
+> Current repository name is still `skyline_qc`; package/repository renaming can be done separately.
 
 ## Installation
 
@@ -43,11 +47,11 @@ You can install the dependencies and set up the environment using [Conda](https:
 
 ## To Dos
 1. PRM tool from MARTHA project
-2. Check with Yasset on how to set up targeted sdrf. 
-2. Work a bit with SRM 
-3. Combine with OpenMS 
+2. Check with Yasset on how to set up targeted SDRF.
+3. Work a bit with SRM.
+4. Combine with OpenMS.
 
 ## Issues
-- iRT peptides. Why they contain Biognosys sequences? 
+- iRT peptides: why do they contain Biognosys sequences?
 - Oxidation
-- Stat for PEP
+- Stats for PEP
