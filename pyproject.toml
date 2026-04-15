@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "skyline-qc"
+name = "kardemumma"
 version = "0.1.0"
-description = "Simple tools to clean up data from Skyline"
+description = "Key Analysis of Reproducible Data for Efficient Monitoring in Unified Mass Spectrometry Methods and Assays"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -27,5 +27,5 @@ dependencies = [
 where = ["src"]
 
 [project.urls]
-Homepage = "https://github.com/thanadol-git/skyline_qc"
-Issue = "https://github.com/thanadol-git/skyline_qc/issues"
+Homepage = "https://github.com/thanadol-git/kardemumma"
+Issue = "https://github.com/thanadol-git/kardemumma/issues"
