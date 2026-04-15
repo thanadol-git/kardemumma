@@ -397,8 +397,8 @@ def count_ions_channel(df: pd.DataFrame) -> pd.DataFrame:
     df_count = df_count.reset_index()
 
 
-    # Sort by filename, Sequence
-    df_count = df_count.sort_values(['filename', 'Sequence'])
+    # Sort by Sequence
+    df_count = df_count.sort_values('Sequence')
     return df_count
 
 def _summarise_ions_channel_count(df: pd.DataFrame) -> pd.DataFrame:
