@@ -18,7 +18,7 @@ and works with the following key columns:
 - ``Peptide Retention Time``  – observed retention time (minutes)
 - ``Predicted Retention Time``– iRT-predicted retention time (minutes)
 
-Plotting functions are in :mod:`skyline_qc.prm_plots`.
+Plotting functions are in :mod:`kardemumma.prm_plots`.
 """
 
 import logging
