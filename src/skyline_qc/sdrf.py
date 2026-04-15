@@ -10,7 +10,6 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
-
 def validate_sdrf(sdrf_file: str) -> Tuple[bool, str]:
     """
     Validate an SDRF file using sdrf-pipelines (parse_sdrf validate-sdrf).
@@ -78,7 +77,9 @@ def readout_ms_type(sdrf_file: str) -> list:
     df = pd.read_csv(sdrf_file, sep="\t")
     col_name = "comment[proteomics data acquisition method]"
     if col_name not in df.columns:
-        raise ValueError(f"Column '{col_name}' not found in SDRF file: {sdrf_file}")
+        raise ValueError(
+            f"Column '{col_name}' not found in SDRF file: {sdrf_file}"
+        )
 
     return df[col_name].drop_duplicates().tolist()
 
@@ -87,7 +88,7 @@ def csv_to_tsv(csv_file: str, tsv_file: str) -> None:
     Convert a CSV file to a TSV file.
     """
     df = pd.read_csv(csv_file, sep=",")
-    df.to_csv(tsv_file, sep="\t", index=False)  
+    df.to_csv(tsv_file, sep="\t", index=False)
 
 def remove_whitespace(sdrf_file: str, out_file: str | None = None) -> None:
     """
@@ -104,8 +105,11 @@ def remove_whitespace(sdrf_file: str, out_file: str | None = None) -> None:
     for col in df.columns:
         str_mask = mask[col]
         if str_mask.any():
-            df.loc[str_mask, col] = df.loc[str_mask, col].map(lambda x: x.strip() if isinstance(x, str) else x)
-    df.to_csv(out_file if out_file is not None else sdrf_file, sep="\t", index=False)
+            df.loc[str_mask, col] = df.loc[str_mask, col].map(
+                lambda x: x.strip() if isinstance(x, str) else x
+            )
+    output_path = out_file if out_file is not None else sdrf_file
+    df.to_csv(output_path, sep="\t", index=False)
 
 def detect_trailing_whitespace(sdrf_file: str) -> bool:
     """
@@ -134,7 +138,9 @@ def detect_trailing_whitespace(sdrf_file: str) -> bool:
                     f"  Row {row_label}, Column '{col_name}': ->{original!r}<-"
                 )
         if problem_columns:
-            print("\nColumns with one or more cells containing leading/trailing whitespace:")
+            print(
+                "\nColumns with one or more cells containing leading/trailing whitespace:"
+            )
             for col_name in problem_columns:
                 print(f"  - {col_name}")
     else:
