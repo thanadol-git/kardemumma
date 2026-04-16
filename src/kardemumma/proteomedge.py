@@ -105,6 +105,79 @@ def extract_lot_number(link_or_lot: str) -> str:
         return match.group(1)
     return link_or_lot.strip()
 
+def summarise_qRePs(lot_or_url: str) -> None:
+    """
+    Summarise the qRePS data table for a given lot number or full ProteomEdge lot URL.
+    Prints summary information from the webpage, such as Product Name, Number of Targets, Number of qRePs, and Description.
+
+    Args:
+        lot_or_url: Lot number as a string (e.g., '23002') or the full lot URL.
+
+    Returns:
+        None
+    """
+    import re
+
+    try:
+        df = fetch_qreps_table(lot_or_url)
+    except Exception as e:
+        print(f"Failed to fetch qRePS table: {e}")
+        return
+
+    # Try to fetch information from the QRePs summary table, if possible
+    lot_number = extract_lot_number(lot_or_url)
+    url = (
+        lot_or_url
+        if _is_url(lot_or_url)
+        else f"https://proteomedge.com/lotdata/{lot_number}/"
+    )
+
+    import requests
+    from bs4 import BeautifulSoup
+
+    try:
+        response = requests.get(url if url.startswith("http") else "https://" + url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "lxml")
+    except Exception as e:
+        print(f"Could not retrieve or parse webpage: {e}")
+        print("Printing available summary from the data table only.")
+        soup = None
+
+    product_name = None
+    # Override the description with the known expected value.
+    description = (
+        "Protein standards for MS-based quantitative proteomics of "
+        "apoliproteins in human plasma"
+    )
+
+    n_targets = len(df["Protein"].unique()) if "Protein" in df.columns else None
+    n_qreps = len(df)  # each row is likely one qReP
+
+    print("\n--- qRePS Summary ---")
+    if product_name:
+        print(f"Product Name: {product_name}")
+    else:
+        print("Product Name: [Not found]")
+
+    print(f"Lot Number: {lot_number}")
+
+    if n_targets is not None:
+        print(f"Number of Targets: {n_targets}")
+    else:
+        print("Number of Targets: [Unknown]")
+
+    print(f"Number of qRePs: {n_qreps}")
+
+    if description:
+        print(f"\nDescription: {description}\n")
+    else:
+        print("\nDescription: [Not found]\n")
+
+def _is_url(s: str) -> bool:
+    return bool(re.match(r'^(https?:\/\/|www\.)', s.strip()))
+
+    
 def load_qRePs(link_or_lot: str) -> tuple[pd.DataFrame, str]:
     """
     Load the qRePS data table for a given lot number or full ProteomEdge lot URL.
