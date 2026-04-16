@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 import requests
 import pandas as pd
+from bs4 import BeautifulSoup
 
 
 def fetch_qreps_table(link_or_lot: str) -> pd.DataFrame:
@@ -132,8 +133,6 @@ def summarise_qRePs(lot_or_url: str) -> None:
         else f"https://proteomedge.com/lotdata/{lot_number}/"
     )
 
-    import requests
-    from bs4 import BeautifulSoup
 
     try:
         response = requests.get(url if url.startswith("http") else "https://" + url)
@@ -177,6 +176,33 @@ def summarise_qRePs(lot_or_url: str) -> None:
 def _is_url(s: str) -> bool:
     return bool(re.match(r'^(https?:\/\/|www\.)', s.strip()))
 
+# def load_fasta_file(link_or_lot: str) -> pd.DataFrame:
+#     """
+#     Load the FASTA file for a given lot number or full ProteomEdge lot URL.
+#     On the page, there is a link to fasta file (ending with .fasta). Load the content of the file and print out the top 10 rows.
+#     Args:
+#         link_or_lot: Lot number as a string (e.g., '23002') or the full lot URL.
+
+#     Returns:
+#         pd.DataFrame: DataFrame containing the FASTA data.
+#     """
+#     lot_number = extract_lot_number(link_or_lot)
+    
+#     # Scrape the page and find the link to the FASTA file
+#     url = f"https://proteomedge.com/lotdata/{lot_number}/"
+#     response = requests.get(url)
+#     response.raise_for_status()
+#     soup = BeautifulSoup(response.text, "lxml")
+#     fasta_link = soup.find("a", href=re.compile(r"\.fasta$"))
+#     if not fasta_link:
+#         raise ValueError("Could not find FASTA link on the page.")
+#     fasta_url = fasta_link["href"]
+#     response = requests.get(fasta_url)
+#     response.raise_for_status()
+#     df = pd.read_csv(io.StringIO(response.text), sep='\t', header=None)
+#     df.columns = ['id', 'description', 'sequence']
+#     print(df.head(10))
+#     return df
     
 def load_qRePs(link_or_lot: str) -> tuple[pd.DataFrame, str]:
     """
