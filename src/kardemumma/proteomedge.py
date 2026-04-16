@@ -26,7 +26,7 @@ def fetch_qreps_table(link_or_lot: str) -> pd.DataFrame:
     # print(lot_only)  # Output: "23002"
     #
     # Example:
-    #     import skyline_qc.proteomedge as pe
+    #     import kardemumma.proteomedge as pe
     #     df = pe.fetch_qreps_table("23002")
     #     print(df.head())
 
@@ -176,34 +176,122 @@ def summarise_qRePs(lot_or_url: str) -> None:
 def _is_url(s: str) -> bool:
     return bool(re.match(r'^(https?:\/\/|www\.)', s.strip()))
 
-# def load_fasta_file(link_or_lot: str) -> pd.DataFrame:
-#     """
-#     Load the FASTA file for a given lot number or full ProteomEdge lot URL.
-#     On the page, there is a link to fasta file (ending with .fasta). Load the content of the file and print out the top 10 rows.
-#     Args:
-#         link_or_lot: Lot number as a string (e.g., '23002') or the full lot URL.
 
-#     Returns:
-#         pd.DataFrame: DataFrame containing the FASTA data.
-#     """
-#     lot_number = extract_lot_number(link_or_lot)
-    
-#     # Scrape the page and find the link to the FASTA file
-#     url = f"https://proteomedge.com/lotdata/{lot_number}/"
-#     response = requests.get(url)
-#     response.raise_for_status()
-#     soup = BeautifulSoup(response.text, "lxml")
-#     fasta_link = soup.find("a", href=re.compile(r"\.fasta$"))
-#     if not fasta_link:
-#         raise ValueError("Could not find FASTA link on the page.")
-#     fasta_url = fasta_link["href"]
-#     response = requests.get(fasta_url)
-#     response.raise_for_status()
-#     df = pd.read_csv(io.StringIO(response.text), sep='\t', header=None)
-#     df.columns = ['id', 'description', 'sequence']
-#     print(df.head(10))
-#     return df
-    
+def _parse_fasta(text: str) -> pd.DataFrame:
+    """
+    Parse raw FASTA text into a DataFrame with columns ``id``, ``description``, ``sequence``.
+    """
+    records = []
+    current_id = None
+    current_desc = ""
+    seq_lines: list[str] = []
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith(">"):
+            if current_id is not None:
+                records.append({
+                    "id": current_id,
+                    "description": current_desc,
+                    "sequence": "".join(seq_lines),
+                })
+            parts = line[1:].split(None, 1)
+            current_id = parts[0]
+            current_desc = parts[1] if len(parts) > 1 else ""
+            seq_lines = []
+        else:
+            seq_lines.append(line)
+
+    if current_id is not None:
+        records.append({
+            "id": current_id,
+            "description": current_desc,
+            "sequence": "".join(seq_lines),
+        })
+
+    return pd.DataFrame(records, columns=["id", "description", "sequence"])
+
+
+def _fasta_url_for_lot(link_or_lot: str) -> tuple[str, str]:
+    """
+    Return ``(lot_number, fasta_text)`` by scraping the ProteomEdge lot page.
+    Raises ``ValueError`` if no ``.fasta`` link is found.
+    """
+    from urllib.parse import urljoin
+
+    lot_number = extract_lot_number(link_or_lot)
+    page_url = (
+        link_or_lot if _is_url(link_or_lot)
+        else f"https://proteomedge.com/lotdata/{lot_number}/"
+    )
+    if not page_url.startswith("http"):
+        page_url = "https://" + page_url
+
+    page = requests.get(page_url, timeout=30)
+    page.raise_for_status()
+    soup = BeautifulSoup(page.text, "lxml")
+
+    fasta_tag = soup.find("a", href=re.compile(r"\.fasta", re.I))
+    if not fasta_tag:
+        raise ValueError(f"No .fasta link found on page: {page_url}")
+
+    fasta_href = fasta_tag["href"]
+    if not fasta_href.startswith("http"):
+        fasta_href = urljoin(page_url, fasta_href)
+
+    fasta_resp = requests.get(fasta_href, timeout=30)
+    fasta_resp.raise_for_status()
+    return lot_number, fasta_resp.text
+
+
+def fetch_fasta(link_or_lot: str) -> pd.DataFrame:
+    """
+    Fetch the FASTA file for a ProteomEdge lot and return it as a DataFrame.
+
+    Scrapes the lot page to locate the ``.fasta`` download link, downloads it,
+    and parses it into a tidy table.
+
+    Args:
+        link_or_lot: Lot number (e.g. ``'23002'``) or full lot URL.
+
+    Returns:
+        pd.DataFrame with columns ``id``, ``description``, ``sequence`` —
+        one row per FASTA entry.
+
+    Raises:
+        ValueError: If no ``.fasta`` link is found on the lot page.
+        requests.HTTPError: If any HTTP request fails.
+    """
+    _, fasta_text = _fasta_url_for_lot(link_or_lot)
+    return _parse_fasta(fasta_text)
+
+
+def save_fasta(link_or_lot: str, out_file: str | None = None) -> tuple[pd.DataFrame, str]:
+    """
+    Fetch the FASTA file for a ProteomEdge lot, save it locally, and return the
+    parsed DataFrame together with the saved filename.
+
+    Args:
+        link_or_lot: Lot number (e.g. ``'23002'``) or full lot URL.
+        out_file: Destination path.  If ``None``, defaults to
+            ``YYYYMMDD_<lot>.fasta`` in the working directory.
+
+    Returns:
+        tuple: ``(df, out_file)`` where *df* is a DataFrame with columns
+        ``id``, ``description``, ``sequence`` and *out_file* is the path
+        of the saved file.
+    """
+    lot_number, fasta_text = _fasta_url_for_lot(link_or_lot)
+    if out_file is None:
+        today_str = datetime.now().strftime("%Y%m%d")
+        out_file = f"{today_str}_{lot_number}.fasta"
+    with open(out_file, "w") as fh:
+        fh.write(fasta_text)
+    return _parse_fasta(fasta_text), out_file
+
+
 def load_qRePs(link_or_lot: str) -> tuple[pd.DataFrame, str]:
     """
     Load the qRePS data table for a given lot number or full ProteomEdge lot URL.

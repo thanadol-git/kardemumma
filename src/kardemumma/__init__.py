@@ -67,6 +67,8 @@ from .proteomedge import (
     extract_lot_number,
     load_qRePs,
     load_qRePs_to_csv,
+    fetch_fasta,
+    save_fasta,
 )
 
 __all__ = [
@@ -128,4 +130,6 @@ __all__ = [
     "extract_lot_number",
     "load_qRePs",
     "load_qRePs_to_csv",
+    "fetch_fasta",
+    "save_fasta",
 ]
