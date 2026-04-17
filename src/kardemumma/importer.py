@@ -199,40 +199,48 @@ def cross_check_skyline_sdrf(
     """
     Cross-check Skyline ``File Name`` values vs SDRF ``comment[data file]``.
 
-    By default, names are normalized (basename + strip trailing ``_########`` before
-    ``.raw``) and the check is **``sdrf_in_skyline``**: every distinct SDRF file must
-    appear in Skyline; extra Skyline files (e.g. repeated QC acquisitions) are allowed.
+    By default, names are normalized (basename and optionally removing one or more trailing
+    ``_########`` blocks before ``.raw``). The default check is ``sdrf_in_skyline``: 
+    every distinct SDRF file must be present in Skyline; extra Skyline files (e.g. repeated 
+    QC acquisitions) are allowed.
 
     Use ``match_mode="exact"`` for strict set equality after normalization.
     Use ``strip_acquisition_suffix=False`` to compare strings verbatim.
-
-    Returns:
-        ``True`` after printing a comparison report.
     """
+    # Validate that required columns are present
     for label, df, col in (
         ("skyline", skyline_df, skyline_file_col),
         ("sdrf", sdrf_df, sdrf_file_col),
     ):
         if col not in df.columns:
-            print(f"Missing required column {col!r} in {label}_df. Found: {list(df.columns)}")
-            return True
+            print(
+                f"Missing required column {col!r} in {label}_df. "
+                f"Found columns: {list(df.columns)}"
+            )
+            return False
 
     skyline_set = _normalized_file_set(
-        skyline_df[skyline_file_col], strip_acquisition_suffix=strip_acquisition_suffix
+        skyline_df[skyline_file_col],
+        strip_acquisition_suffix=strip_acquisition_suffix,
     )
     sdrf_set = _normalized_file_set(
-        sdrf_df[sdrf_file_col], strip_acquisition_suffix=strip_acquisition_suffix
+        sdrf_df[sdrf_file_col],
+        strip_acquisition_suffix=strip_acquisition_suffix,
     )
 
     if match_mode not in {"exact", "sdrf_in_skyline"}:
-        print(f"Unknown match_mode {match_mode!r}; continuing with a generic set comparison report.")
+        print(
+            f"Unknown match_mode {match_mode!r}; performing generic set comparison."
+        )
 
-    print("Skyline files:", len(skyline_set))
-    print("SDRF files:", len(sdrf_set))
-    print("Overlapping files:", len(skyline_set & sdrf_set))
-    print("Only in Skyline:", sorted(skyline_set - sdrf_set))
-    print("Only in SDRF:", sorted(sdrf_set - skyline_set))
-    return True
+    print(f"Skyline files: {len(skyline_set)}")
+    print(f"SDRF files: {len(sdrf_set)}")
+    overlap = skyline_set & sdrf_set
+    only_in_skyline = skyline_set - sdrf_set
+    only_in_sdrf = sdrf_set - skyline_set
+    print(f"Overlapping files: {len(overlap)}")
+    print(f"Only in Skyline: {sorted(only_in_skyline)}")
+    print(f"Only in SDRF: {sorted(only_in_sdrf)}")
 
 
 def import_sdrf_file(file_path: str) -> pd.DataFrame:
