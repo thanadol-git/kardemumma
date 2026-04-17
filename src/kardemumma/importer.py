@@ -193,6 +193,7 @@ class ImportFile():
             "Peptide Retention Time",
             "Retention Time Calculator Score",
             "Predicted Retention Time",
+            "Precursor Charge",
             "Peptide Sequence",
             "Peptide",
             "Normalized Area",
@@ -207,7 +208,9 @@ class ImportFile():
                 f"The file {self.file_path} is missing expected columns: {missing_columns}. "
                 f"Actual columns: {list(df.columns)}"
             )
-
+        else:   
+            print(f"The file {self.file_path} has the expected columns.")
+            
         df = df.copy()
         df["Isotope Label Type"] = df["Precursor"].apply(
             lambda x: "heavy"
