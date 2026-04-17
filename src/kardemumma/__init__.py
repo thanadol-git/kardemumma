@@ -15,6 +15,7 @@ from .importer import (
     get_irt_peptides,
     normalize_data_filename,
     import_sdrf_file,
+    remove_qc_samples,  # Added here
 )
 from .sdrf import validate_sdrf
 from .prm import (
@@ -82,6 +83,7 @@ __all__ = [
     "get_irt_peptides",
     "normalize_data_filename",
     "import_sdrf_file",
+    "remove_qc_samples",  # Added here
     # SDRF
     "validate_sdrf",
     # PRM — quality filtering
