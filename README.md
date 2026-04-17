@@ -66,3 +66,9 @@ You can install the dependencies and set up the environment using [Conda](https:
 - iRT peptides: why do they contain Biognosys sequences?
 - Oxidation
 - Stats for PEP
+
+## Key developers
+- Thanadol Sutantiwanichkul
+- Justin Sing
+- Khue Hua Tran Minh
+- Maria-Jesus
