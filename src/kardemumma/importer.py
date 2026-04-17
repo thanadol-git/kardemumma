@@ -1,6 +1,6 @@
 import os
 import re
-from typing import List, Literal, Optional, Set
+from typing import Iterable, List, Literal, Optional, Set
 
 import pandas as pd
 
@@ -30,27 +30,28 @@ def _validate_path(path: str, ext: str) -> None:
     if not path.lower().endswith(ext):
         raise ValueError(f"Expected a {ext.upper()} file, got: {path}")
 
-
-def _suggest_qc_replicate_names(df: pd.DataFrame, col_files: str = "Replicate") -> List[str]:
+def _suggest_qc_replicate_names(names: Iterable[object]) -> List[str]:
     """
-    Return unique values from ``col_files`` that look like QC samples.
+    Take a list of sample/replicate names and return a sorted list of unique names
+    that look like QC samples.
 
-    A value is considered QC-like if it contains 'qc' (case-insensitive) in the file name.
+    QC sample names are identified if they contain 'qc', 'quality control', or 'quality'
+    (case-insensitive).
     """
-    
-    # Raise error if the column is not in the dataframe
-    if col_files not in df.columns: 
-        raise ValueError(f"Column '{col_files}' not found in DataFrame.")
+    if names is None:
+        return []
+    # Accept list/Series/NumPy arrays and other iterables.
+    unique_names = set(str(x) for x in names if pd.notna(x))
 
-    # Words to match in the file name
-    word_to_match = ["qc", "Quality Control", "QC", "Quality"]
-    # Extract file names from the dataframe
-    file_names = df[col_files].dropna().astype(str).unique()
+    # Lowercase targets
+    targets = ("qc", "quality control", "quality")
 
-    # Find file names that contain the words to match
-    qc_samples = [fn for fn in file_names if any(word in fn.lower() for word in word_to_match)]
-    
-    # Return sorted list of file names  
+    # Identify names containing any of the targets (case-insensitive)
+    qc_samples = [
+        name for name in unique_names
+        if any(target in name.lower() for target in targets)
+    ]
+
     return sorted(qc_samples)
 
 
@@ -308,18 +309,16 @@ class ImportFile:
         Returns:
             Sorted list of replicate names.
         """
-        # Raise error if the dataframe is not provided
         if df is None:
-            raise ValueError("DataFrame is required.")
-        
-        # Validate the path
-        _validate_path(self.file_path, ".csv")
-        
-        # Read the dataframe
-        df = pd.read_csv(self.file_path)
-        
-        # Suggest QC samples
-        suspicious = _suggest_qc_replicate_names(df, col_files="Replicate")
+            _validate_path(self.file_path, ".csv")
+            df = pd.read_csv(self.file_path)
+
+        if "Replicate" not in df.columns:
+            raise ValueError(
+                f"Column 'Replicate' not found. Available columns: {list(df.columns)}"
+            )
+
+        suspicious = _suggest_qc_replicate_names(df["Replicate"].unique())
  
         if suspicious:
             print(f"Possible QC samples: {suspicious}")
@@ -336,7 +335,7 @@ class ImportFile:
     def import_sdrf_file(self) -> pd.DataFrame:
         _validate_path(self.file_path, ".tsv")
         df = pd.read_csv(self.file_path, sep="\t")
-        qc_samples = _suggest_qc_replicate_names(df, col_files="comment[data file]")
+        qc_samples = _suggest_qc_replicate_names(df["comment[data file]"].unique())
         print(f"QC samples from SDRF: {qc_samples}")
         print("Consider removing these before further analysis.")
         return df
@@ -365,7 +364,7 @@ class CheckSkylineFile:
         """
         if df is None:
             df = self._load_csv()
-        return _suggest_qc_replicate_names(df, col_files="Replicate")
+        return _suggest_qc_replicate_names(df["Replicate"].unique())
 
     def get_irt_peptides(self) -> List[str]:
         """Load this CSV and return iRT peptide sequences."""
