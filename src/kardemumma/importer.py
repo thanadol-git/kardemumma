@@ -31,6 +31,29 @@ def _validate_path(path: str, ext: str) -> None:
         raise ValueError(f"Expected a {ext.upper()} file, got: {path}")
 
 
+def _suggest_qc_replicate_names(df: pd.DataFrame, col_files: str = "Replicate") -> List[str]:
+    """
+    Return unique values from ``col_files`` that look like QC samples.
+
+    A value is considered QC-like if it contains 'qc' (case-insensitive) in the file name.
+    """
+    
+    # Raise error if the column is not in the dataframe
+    if col_files not in df.columns: 
+        raise ValueError(f"Column '{col_files}' not found in DataFrame.")
+
+    # Words to match in the file name
+    word_to_match = ["qc", "Quality Control", "QC", "Quality"]
+    # Extract file names from the dataframe
+    file_names = df[col_files].dropna().astype(str).unique()
+
+    # Find file names that contain the words to match
+    qc_samples = [fn for fn in file_names if any(word in fn.lower() for word in word_to_match)]
+    
+    # Return sorted list of file names  
+    return sorted(qc_samples)
+
+
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
@@ -277,15 +300,24 @@ class ImportFile:
         Returns:
             Sorted list of replicate names.
         """
+        # Raise error if the dataframe is not provided
         if df is None:
-            _validate_path(self.file_path, ".csv")
-            df = pd.read_csv(self.file_path)
-        suspicious = _suggest_qc_replicate_names(df)
+            raise ValueError("DataFrame is required.")
+        
+        # Validate the path
+        _validate_path(self.file_path, ".csv")
+        
+        # Read the dataframe
+        df = pd.read_csv(self.file_path)
+        
+        # Suggest QC samples
+        suspicious = _suggest_qc_replicate_names(df, col_files="Replicate")
+ 
         if suspicious:
             print(f"Possible QC samples: {suspicious}")
-            print("Consider removing these before further analysis.")
+            print("Consider removing these QC samples before further analysis.")
         else:
-            print("No suspicious replicates found.")
+            print("No QC samples found.")
         return suspicious
 
     def import_qreps_file(self) -> pd.DataFrame:
@@ -325,7 +357,7 @@ class CheckSkylineFile:
         """
         if df is None:
             df = self._load_csv()
-        return _suggest_qc_replicate_names(df)
+        return _suggest_qc_replicate_names(df, col_files="Replicate")
 
     def get_irt_peptides(self) -> List[str]:
         """Load this CSV and return iRT peptide sequences."""
