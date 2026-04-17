@@ -46,6 +46,7 @@ You can install the dependencies and set up the environment using [Conda](https:
 - For pip installs, make sure you have internet access.
 
 ## To Dos
+0. Remove 3 under-QC samples from analysis 
 1. Check with Yasset on how to set up targeted SDRF.
 2. Publish python package asap
 3. Develop snakemake pipeline 
