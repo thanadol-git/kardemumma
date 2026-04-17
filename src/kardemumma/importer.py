@@ -59,7 +59,46 @@ def _suggest_qc_replicate_names(names: Iterable[object]) -> List[str]:
 # Public functions
 # ---------------------------------------------------------------------------
 
+def remove_qc_samples(
+    df: pd.DataFrame, 
+    qc_samples: List[str], 
+    file_col: str = "File Name", 
+    ignore_filetype: bool = False,
+    print_summary: bool = False
+) -> pd.DataFrame:
+    """
+    Remove QC samples from the skyline data.
 
+    Args:
+        df: Input DataFrame containing Skyline data.
+        qc_samples: List of QC sample names to remove (matching file_col).
+        file_col: Column name containing sample names or filenames. Default: "File Name".
+        ignore_filetype: Ignore file extension when matching file names. Default: False.
+        print_summary: If True, print summary of removal. Default: False.
+
+    Returns:
+        DataFrame with QC samples removed.
+    """
+    if file_col not in df.columns:
+        raise ValueError(f"File column '{file_col}' not found in DataFrame. Columns: {list(df.columns)}")
+
+    working_df = df.copy()
+    # Remove file extensions if ignore_filetype is True
+    if ignore_filetype:
+        working_df[file_col] = working_df[file_col].astype(str).str.split(".").str[0]
+        # Also remove file extensions from qc_samples for a fair match
+        qc_samples_stripped = [str(name).split(".")[0] for name in qc_samples]
+    else:
+        qc_samples_stripped = qc_samples
+
+    filtered_df = working_df[~working_df[file_col].isin(qc_samples_stripped)]
+
+    if print_summary:
+        n_removed = len(working_df) - len(filtered_df)
+        print(f"Number of rows removed: {n_removed}")
+        print(f"These are the QC samples used for exclusion: {sorted(set(qc_samples_stripped))}")
+
+    return filtered_df
 # ---------------------------------------------------------------------------
 # iRT peptide helpers
 # ---------------------------------------------------------------------------
@@ -321,6 +360,7 @@ class ImportFile:
         suspicious = _suggest_qc_replicate_names(df["Replicate"].unique())
  
         if suspicious:
+            print(f"Number of possible QC samples: {len(suspicious)}")
             print(f"Possible QC samples: {suspicious}")
             print("Consider removing these QC samples before further analysis.")
         else:
