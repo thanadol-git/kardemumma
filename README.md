@@ -4,7 +4,7 @@
 
 This repository contains the Python package for processing and quality-checking targeted mass spectrometry outputs (for example Skyline/OpenSWATH-style exports).
 
-> The current repository name is still `skyline_qc`; this will be updated to `kardemumma` in a future renaming step.
+> The repository name has now been updated from `skyline_qc` to `kardemumma` throughout the project.
 
 ## Installation
 
