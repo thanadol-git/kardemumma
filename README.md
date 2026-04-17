@@ -2,7 +2,7 @@
 
 **KARDEMUMMA** stands for **K**ey **A**nalysis of **R**eproducible **D**ata for **E**fficient **M**onitoring in **U**nified **M**ass **S**pectrometry **M**ethods and **A**ssays.
 
-This repository contains the Python package for processing and quality-checking targeted mass spectrometry outputs (for example Skyline/OpenSWATH-style exports).
+This repository contains the Python package for processing and quality-checking targeted mass spectrometry outputs (for example Skyline/OpenSWATH-style exports). The tool is built based on targeted proteomics assay at KTH Royal intitute of technology and Science for Life Laboratory (SciLifeLab), Sweden. The aim of this tool is to provide a simplified analysis pipeline of plasma proteomics as well as bridging research and clinical applications. 
 
 > The repository name has now been updated from `skyline_qc` to `kardemumma` throughout the project.
 
@@ -39,6 +39,14 @@ You can install the dependencies and set up the environment using [Conda](https:
    ```bash
    pip install -e .
    ```
+
+## Available pipelines
+- [ ] `SDRF generation for plasma proteomics`
+- [ ] `Targeted PRM with ProteomEdge AB`
+- [ ] `Targeted SRM`
+
+
+## Requirement
 
 ### Notes
 - All required dependencies will be installed via Conda and pip as specified in `environment.yml`.
