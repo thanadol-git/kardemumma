@@ -46,10 +46,12 @@ You can install the dependencies and set up the environment using [Conda](https:
 - For pip installs, make sure you have internet access.
 
 ## To Dos
-1. PRM tool from MARTHA project
-2. Check with Yasset on how to set up targeted SDRF.
-3. Work a bit with SRM.
+1. Check with Yasset on how to set up targeted SDRF.
+2. Publish python package asap
+3. Develop snakemake pipeline 
 4. Combine with OpenMS.
+5. Work a bit with SRM.
+
 
 ## Issues
 - iRT peptides: why do they contain Biognosys sequences?
