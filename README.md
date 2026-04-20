@@ -92,5 +92,5 @@ The project should be located at the `hot storage` of the lab. One can find the 
 - Thanadol Sutantiwanichkul
 - Justin Sing
 - Khue Hua Tran Minh
-- Maria-Jesus
+- Maria-Jesus Iglesias Mareque
 - Fredrik Edfors
