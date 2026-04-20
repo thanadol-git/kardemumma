@@ -93,3 +93,4 @@ The project should be located at the `hot storage` of the lab. One can find the 
 - Justin Sing
 - Khue Hua Tran Minh
 - Maria-Jesus
+- Fredrik Edfors
