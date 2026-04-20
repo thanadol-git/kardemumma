@@ -54,9 +54,9 @@ You can install the dependencies and set up the environment using [Conda](https:
 - For pip installs, make sure you have internet access.
 
 ### Storage location for Edfors lab, 
-The project should be located at the `hot storage` of the lab. One can find the project name inside. Within the folder, there shall be a raw folder where we keep the raw files from MS injections. The SDRF file should be located along side. Please take a look below. Constatnly, the raw file should be tested for it completeness.
+The project should be located at the `hot storage` of the lab. One can find the project name inside. Within the folder, there shall be a raw folder where we keep the raw files from MS injections. The SDRF file should be located along side. Please take a look below. Constatnly, the raw file should be tested for it completeness. (TBC)
 ```
-kardemumma/
+01_hot/
 └── Project ABC/
     ├── raw/
     │   ├── sample1.raw
