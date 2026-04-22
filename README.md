@@ -81,6 +81,7 @@ The project should be located at the `hot storage` of the lab. One can find the 
 3. Develop snakemake pipeline 
 4. Combine with OpenMS.
 5. Work a bit with SRM.
+6. Integrate prm-slider to work with the transition levels
 
 
 ## Issues
