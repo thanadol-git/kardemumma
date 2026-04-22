@@ -108,9 +108,9 @@ def remove_qc_samples(
 # ---------------------------------------------------------------------------
 # iRT peptide helpers
 # ---------------------------------------------------------------------------
-def _match_bionosys(peptide_list: List[str], ):
+def _match_biognosys(peptide_list: List[str], verbose: bool = False ):
     """
-    Print out suggestion that the iRT peptides are from Bionosys.
+    Print out suggestion that the iRT peptides are from Biognosys.
     Args:
         protein_list: List of protein names.
     Returns:
@@ -120,8 +120,8 @@ def _match_bionosys(peptide_list: List[str], ):
     # Make peptide list unique
     peptide_list = list(set(peptide_list))
 
-    # Bionosys iRT peptides
-    bionosys_list = ["LGGNEQVTR", 
+    # Biogosys iRT peptides
+    biognosys_list = ["LGGNEQVTR", 
                      "GAGSSEPVTGLDAK",
                      "VEATFGVDESNAK",
                      "YILAGVENSK",
@@ -136,22 +136,24 @@ def _match_bionosys(peptide_list: List[str], ):
     matched = []
     not_matched = []
     
-    print('Checking if the peptides are from Bionosys...')
+    print('Checking if the peptides are from Biognosys...')
     
-    # Check if the peptide is in the Bionosys list
+    # Check if the peptide is in the Biognosys list
     for peptide in peptide_list:
-        if peptide in bionosys_list:
+        if peptide in biognosys_list:
             matched.append(peptide)
         else:
             not_matched.append(peptide)
     if matched:
-        print(f"The following peptides are from Bionosys: {', '.join(matched)}.")
+        if verbose == True:
+            print(f"The following peptides are from Biognosys: {', '.join(matched)}.")
     if not_matched:
-        print(f"The following peptides are not from Bionosys: {', '.join(not_matched)}.")
+        if verbose == True:
+            print(f"The following peptides are not from Biognosys: {', '.join(not_matched)}.")
        
-    
-    # Print out the number of peptides that matched with Bionosys
-    print(f"Number of peptides that did not match with Bionosys: {len(not_matched)}")
+    # Print out the number of peptides that matched with Biognosys
+    if verbose == True:
+        print(f"Number of peptides that did not match with Biognosys: {len(not_matched)}")
 
 def get_irt_peptides(
     df: pd.DataFrame,
@@ -159,7 +161,7 @@ def get_irt_peptides(
     protein_col: str = "Protein Name",
     peptide_col: str = "Peptide Sequence",
     tag_substring: str = "iRT_Tag",
-    match_bionosys: bool = True,
+    match_biognosys: bool = True,
     ) -> List[str]:
     """
     Unique peptide sequences for rows whose protein name contains the iRT tag
@@ -188,9 +190,9 @@ def get_irt_peptides(
     # Extract peptide list that contains the tag substring in protein column
     peptide_list = df.loc[df[protein_col].astype(str).str.contains(tag_substring, na=False, regex=False), peptide_col].drop_duplicates().tolist()
     
-    # Match iRT peptides with Bionosys
-    if match_bionosys:
-        _match_bionosys(peptide_list)
+    # Match iRT peptides with Biognosys
+    if match_biognosys:
+        _match_biognosys(peptide_list)
     
     print("\n")
     print(f"Number of iRT peptides: {len(peptide_list)}")
@@ -366,12 +368,7 @@ class ImportSkylineFile:
 
         suspicious = _suggest_qc_replicate_names(df["Replicate"].unique())
  
-        if suspicious:
-            print(f"Number of possible QC samples: {len(suspicious)}")
-            print(f"Possible QC samples: {suspicious}")
-            print("Consider removing these QC samples before further analysis.")
-        else:
-            print("No QC samples found.")
+
         return suspicious
     
 class ImportSDRFFile:
@@ -389,31 +386,57 @@ class ImportSDRFFile:
         
     def _summarise_sdrf_file(self) -> None:
         """Summarize the SDRF file."""
-        print(f"Summarizing SDRF file: {self.file_path}")
-        print(f"Number of rows: {len(df)}")
-        print(f"Number of columns: {len(df.columns)}")
-        print(f"Columns: {list(df.columns)}")
-        print(f"Data types: {df.dtypes}")
-        
+        df = self.import_sdrf_file()
+
+        print(f"Summary for SDRF file: {self.file_path}")
+        print(f"Rows: {df.shape[0]}")
+        print(f"Columns: {df.shape[1]}")
+        # print("Column names:", ", ".join(df.columns))
+        print("\nData types:")
+        print(df.dtypes)
+   
     def info(self) -> None:
         self._summarise_sdrf_file()
 
     def import_sdrf_file(self) -> pd.DataFrame:
         _validate_path(self.file_path, ".tsv")
         df = pd.read_csv(self.file_path, sep="\t")
-        qc_samples = _suggest_qc_replicate_names(df["comment[data file]"].unique())
-        print(f"QC samples from SDRF: {qc_samples}")
-        print("Consider removing these before further analysis.")
         return df
     
-    def extract_qreps_lot_number(self) -> str:
-        """Extract the qREPs lot number from the file path."""
+    def suggest_qc_samples(self) -> List[str]:
+        """Check if the QC samples are present in the SDRF file."""
+        df = self.import_sdrf_file()
+        qc_samples = _suggest_qc_replicate_names(df["comment[data file]"].unique())
         
-        # Check on column "comment[ProteomEdge]" and print unique values
-        lot_numbers = self.import_sdrf_file()['comment[ProteomEdge]'].unique()
+        return qc_samples
+    
+    def extract_qreps_lot_number(self) -> str:
+        """
+        Extract the qREPs lot number from the SDRF file by checking the
+        'comment[ProteomEdge]' column for a unique value.
+
+        Returns:
+            str: The unique qREPs lot number.
+
+        Raises:
+            ValueError: If multiple or no lot numbers are found.
+        """
+        df = self.import_sdrf_file()
+        col = 'comment[ProteomEdge]'
+        
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' not found in SDRF file.")
+        lot_numbers = df[col].dropna().unique()
+        
         if len(lot_numbers) != 1:
-            raise ValueError(f"Multiple lot numbers found in comment[ProteomEdge]: {lot_numbers}")
-        return lot_numbers[0]
+            raise ValueError(
+                f"Expected exactly one unique lot number in '{col}', "
+                f"found {len(lot_numbers)}: {lot_numbers}"
+            )
+        else:
+            lot_number = lot_numbers[0]
+            print(f"The qREPs lot number is: {lot_number}")
+            return lot_number
 
 
 # class CheckSkylineFile:
