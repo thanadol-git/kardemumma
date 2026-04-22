@@ -86,6 +86,11 @@ def readout_ms_type(sdrf_file: str) -> list:
 def csv_to_tsv(csv_file: str, tsv_file: str) -> None:
     """
     Convert a CSV file to a TSV file.
+
+    Example:
+        >>> csv_to_tsv("sample.csv", "sample.tsv")
+        # This will read 'sample.csv' (comma-separated) and
+        # output it as 'sample.tsv' (tab-separated), preserving columns and data.
     """
     df = pd.read_csv(csv_file, sep=",")
     df.to_csv(tsv_file, sep="\t", index=False)
