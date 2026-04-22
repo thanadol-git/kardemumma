@@ -9,14 +9,18 @@ outputs (Skyline / OpenSWATH-style exports).
 from .client import SkylineClient
 from .importer import (
     ImportSkylineFile,
-    MergeFiles,
-    cross_check_skyline_sdrf,
+    ImportSDRFFile,
     get_irt_peptides,
     normalize_data_filename,
-    import_sdrf_file,
     remove_qc_samples,
 )
-from .sdrf import validate_sdrf
+from .sdrf import (
+    validate_sdrf,
+    readout_ms_type,
+    csv_to_tsv,
+    remove_whitespace,
+    detect_trailing_whitespace,
+)
 from .prm import (
     # Quality Filtering
     filter_library_dot_product,
@@ -64,6 +68,7 @@ from .openswath import (
 from .proteomedge import (
     fetch_qreps_table,
     extract_lot_number,
+    summarise_qRePs,
     load_qRePs,
     load_qRePs_to_csv,
     fetch_fasta,
@@ -73,16 +78,18 @@ from .proteomedge import (
 __all__ = [
     # Client
     "SkylineClient",
-    # Import / merge
+    # Import
     "ImportSkylineFile",
-    "MergeFiles",
-    "cross_check_skyline_sdrf",
+    "ImportSDRFFile",
     "get_irt_peptides",
     "normalize_data_filename",
-    "import_sdrf_file",
     "remove_qc_samples",
     # SDRF
     "validate_sdrf",
+    "readout_ms_type",
+    "csv_to_tsv",
+    "remove_whitespace",
+    "detect_trailing_whitespace",
     # PRM — quality filtering
     "filter_library_dot_product",
     "filter_peptide_counts",
@@ -127,6 +134,7 @@ __all__ = [
     # ProteomEdge
     "fetch_qreps_table",
     "extract_lot_number",
+    "summarise_qRePs",
     "load_qRePs",
     "load_qRePs_to_csv",
     "fetch_fasta",
