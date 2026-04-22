@@ -474,61 +474,61 @@ class ImportSDRFFile:
 #         )
 
 
-# class MergeFiles:
-#     def __init__(
-#         self,
-#         skyline_df: pd.DataFrame,
-#         sdrf_df: pd.DataFrame,
-#         selected_peptides: Optional[List[str]] = None,
-#     ):
-#         """
-#         Args:
-#             skyline_df: Skyline long-format report (must include ``Replicate``, ``Peptide``).
-#             sdrf_df: SDRF table (must include ``source name``, ``characteristics[Sample]``).
-#             selected_peptides: If given, restrict ``skyline_df`` to these ``Peptide`` values
-#                 before merging. If ``None``, all peptides are kept.
-#         """
-#         self.skyline_df = skyline_df
-#         self.sdrf_df = sdrf_df
-#         self.selected_peptides = selected_peptides
+class MergeFiles:
+    def __init__(
+        self,
+        skyline_df: pd.DataFrame,
+        sdrf_df: pd.DataFrame,
+        selected_peptides: Optional[List[str]] = None,
+    ):
+        """
+        Args:
+            skyline_df: Skyline long-format report (must include ``Replicate``, ``Peptide``).
+            sdrf_df: SDRF table (must include ``source name``, ``characteristics[Sample]``).
+            selected_peptides: If given, restrict ``skyline_df`` to these ``Peptide`` values
+                before merging. If ``None``, all peptides are kept.
+        """
+        self.skyline_df = skyline_df
+        self.sdrf_df = sdrf_df
+        self.selected_peptides = selected_peptides
 
-#     def merge_files(self) -> pd.DataFrame:
-#         """Merge Skyline with SDRF on replicate / source name and add ``characteristics[Plate]``."""
-#         skyline_df = (
-#             self.skyline_df[self.skyline_df["Peptide"].isin(self.selected_peptides)].copy()
-#             if self.selected_peptides is not None
-#             else self.skyline_df
-#         )
+    def merge_files(self) -> pd.DataFrame:
+        """Merge Skyline with SDRF on replicate / source name and add ``characteristics[Plate]``."""
+        skyline_df = (
+            self.skyline_df[self.skyline_df["Peptide"].isin(self.selected_peptides)].copy()
+            if self.selected_peptides is not None
+            else self.skyline_df
+        )
 
-#         required = {"skyline_df": (skyline_df, ["Replicate"]),
-#                     "sdrf_df": (self.sdrf_df, ["source name", "characteristics[Sample]"])}
-#         for label, (frame, cols) in required.items():
-#             missing = [c for c in cols if c not in frame.columns]
-#             if missing:
-#                 raise ValueError(f"Missing column(s) {missing} in {label}")
+        required = {"skyline_df": (skyline_df, ["Replicate"]),
+                    "sdrf_df": (self.sdrf_df, ["source name", "characteristics[Sample]"])}
+        for label, (frame, cols) in required.items():
+            missing = [c for c in cols if c not in frame.columns]
+            if missing:
+                raise ValueError(f"Missing column(s) {missing} in {label}")
 
-#         merged = pd.merge(
-#             skyline_df,
-#             self.sdrf_df[["source name", "characteristics[Sample]"]],
-#             left_on="Replicate",
-#             right_on="source name",
-#             how="left",
-#         )
-#         # expand=False guarantees a Series, no isinstance guard needed
-#         merged["characteristics[Plate]"] = merged["Replicate"].str.extract(
-#             r"Plate_(\d+)", expand=False
-#         )
-#         return merged
+        merged = pd.merge(
+            skyline_df,
+            self.sdrf_df[["source name", "characteristics[Sample]"]],
+            left_on="Replicate",
+            right_on="source name",
+            how="left",
+        )
+        # expand=False guarantees a Series, no isinstance guard needed
+        merged["characteristics[Plate]"] = merged["Replicate"].str.extract(
+            r"Plate_(\d+)", expand=False
+        )
+        return merged
 
-#     def select_pool_data(
-#         self,
-#         df: pd.DataFrame,
-#         col_sample: str = "characteristics[Sample]",
-#         sample_value: str = "Pool",
-#     ) -> pd.DataFrame:
-#         """Select pool data from the DataFrame."""
-#         return (
-#             df[df[col_sample] == sample_value]
-#             .sort_values(["Replicate", "Peptide", "Isotope Label Type"])
-#             .reset_index(drop=True)
-#         )
+    def select_pool_data(
+        self,
+        df: pd.DataFrame,
+        col_sample: str = "characteristics[Sample]",
+        sample_value: str = "Pool",
+    ) -> pd.DataFrame:
+        """Select pool data from the DataFrame."""
+        return (
+            df[df[col_sample] == sample_value]
+            .sort_values(["Replicate", "Peptide", "Isotope Label Type"])
+            .reset_index(drop=True)
+        )

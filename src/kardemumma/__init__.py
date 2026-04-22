@@ -10,6 +10,7 @@ from .client import SkylineClient
 from .importer import (
     ImportSkylineFile,
     ImportSDRFFile,
+    MergeFiles,
     get_irt_peptides,
     normalize_data_filename,
     remove_qc_samples,
@@ -81,6 +82,7 @@ __all__ = [
     # Import
     "ImportSkylineFile",
     "ImportSDRFFile",
+    "MergeFiles",
     "get_irt_peptides",
     "normalize_data_filename",
     "remove_qc_samples",
