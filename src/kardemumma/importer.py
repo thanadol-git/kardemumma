@@ -396,7 +396,7 @@ class ImportSDRFFile:
         print(f"Data types: {df.dtypes}")
         
     def info(self) -> None:
-        _summarise_sdrf_file(self)
+        self._summarise_sdrf_file()
 
     def import_sdrf_file(self) -> pd.DataFrame:
         _validate_path(self.file_path, ".tsv")
