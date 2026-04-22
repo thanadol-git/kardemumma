@@ -881,7 +881,7 @@ def plot_inter_plate_cv_kde(interplate_cv: pd.DataFrame) -> plt.Figure:
     plt.xlabel('Inter-Plate CV')
     plt.ylabel('Density')
     plt.legend()
-    plt.show()
+    # Do not call plt.show() here to avoid showing the plot twice
     return fig
 
 
