@@ -8,14 +8,13 @@ outputs (Skyline / OpenSWATH-style exports).
 
 from .client import SkylineClient
 from .importer import (
-    ImportFile,
-    CheckSkylineFile,
+    ImportSkylineFile,
     MergeFiles,
     cross_check_skyline_sdrf,
     get_irt_peptides,
     normalize_data_filename,
     import_sdrf_file,
-    remove_qc_samples,  # Added here
+    remove_qc_samples,
 )
 from .sdrf import validate_sdrf
 from .prm import (
@@ -40,8 +39,7 @@ from .prm import (
     dot_product_summary,
     retention_time_deviation,
     summarize_prm,
-)
-from .prm_plots import (
+    # Plots
     plot_library_dot_product_distribution,
     plot_heavy_light_scatter,
     plot_peptide_counts,
@@ -76,14 +74,13 @@ __all__ = [
     # Client
     "SkylineClient",
     # Import / merge
-    "ImportFile",
-    "CheckSkylineFile",
+    "ImportSkylineFile",
     "MergeFiles",
     "cross_check_skyline_sdrf",
     "get_irt_peptides",
     "normalize_data_filename",
     "import_sdrf_file",
-    "remove_qc_samples",  # Added here
+    "remove_qc_samples",
     # SDRF
     "validate_sdrf",
     # PRM — quality filtering
@@ -107,7 +104,7 @@ __all__ = [
     "dot_product_summary",
     "retention_time_deviation",
     "summarize_prm",
-    # PRM plots
+    # PRM — plots
     "plot_library_dot_product_distribution",
     "plot_heavy_light_scatter",
     "plot_peptide_counts",
