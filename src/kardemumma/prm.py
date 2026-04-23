@@ -437,37 +437,57 @@ def get_plate_conversion_factors(
     return platemed, conversion_factors, model
 
 
-def adjust_ratio_by_plate(df: pd.DataFrame, conversion_factors: dict) -> pd.DataFrame:
+def plot_plate_conversion_factors(
+    df: pd.DataFrame,
+    col_plate: str = "Plate",
+    ratio_col: str = "RatioLightToHeavy",
+    log_transform: bool = False,
+) -> pd.DataFrame:
     """
-    Multiply ``RatioLightToHeavy`` by the plate-specific correction factor.
-
-    Args:
-        df: DataFrame with ``RatioLightToHeavy`` and ``Plate`` columns.
-        conversion_factors: ``{plate_label: factor}`` mapping from :func:`get_plate_conversion_factors`.
-
-    Returns:
-        Copy of *df* with an added ``RatioLightToHeavy_adj`` column.
+    Based on the plate conversion factors, plot the liner line and color the points by plate. 
+    On x axes are all selected peptides (Peptide Sequence), and on y axes are ratio_fit.
     """
-    def _get_factor(plate: object) -> float:
-        key = str(plate)
-        if key not in conversion_factors:
-            try:
-                key = str(int(float(plate)))
-            except (ValueError, TypeError):
-                pass
-        if key not in conversion_factors:
-            raise KeyError(
-                f"Plate {plate!r} not found in conversion_factors. "
-                f"Available: {list(conversion_factors.keys())}"
-            )
-        return conversion_factors[key]
+    cols = ["Peptide Sequence", "Replicate", col_plate, ratio_col]
+    missing_cols = [c for c in cols if c not in df.columns]
+    if missing_cols:
+        raise KeyError(f"Missing required columns: {missing_cols}")
 
-    df = df.copy()
-    df["RatioLightToHeavy_adj"] = [
-        r * _get_factor(p) for r, p in zip(df["RatioLightToHeavy"], df["Plate"])
-    ]
-    return df
+    d = df[cols].drop_duplicates().copy()
+    d = d.assign(ratio_fit=pd.to_numeric(d[ratio_col], errors="coerce"))
+    if log_transform:
+        d["ratio_fit"] = np.log(d["ratio_fit"])
 
+    model = smf.ols(
+        f'ratio_fit ~ C(Q("{col_plate}")) + C(Q("Peptide Sequence"))', data=d
+    ).fit()
+
+    plot_df = d[["Peptide Sequence", col_plate, "ratio_fit"]]
+    
+    # Plot Peptide Sequence vs ratio_fit and color by plate
+    # Compute average ratio_fit for each peptide
+    peptide_means = plot_df.groupby("Peptide Sequence", observed=True)["ratio_fit"].mean().sort_values()
+    ordered_peptides = peptide_means.index.tolist()
+    # Create a categorical type for the ordering
+    plot_df["Peptide Sequence"] = pd.Categorical(
+        plot_df["Peptide Sequence"], categories=ordered_peptides, ordered=True
+    )
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(
+        x="Peptide Sequence", 
+        y="ratio_fit", 
+        hue=col_plate, 
+        data=plot_df, 
+        dodge=True,
+        showfliers=False,
+    )
+    plt.title("Peptide Sequence vs Ratio Fit Boxplot Colored by Plate")
+    plt.xlabel("Peptide Sequence")
+    plt.ylabel("Ratio Fit")
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.show()
+    return plt.gcf()
+    
 
 # ---------------------------------------------------------------------------
 # General QC

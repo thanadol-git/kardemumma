@@ -37,7 +37,8 @@ from .prm import (
     # Plate Normalization
     plate_peptide_anova,
     get_plate_conversion_factors,
-    adjust_ratio_by_plate,
+    plot_plate_conversion_factors,
+    # adjust_ratio_by_plate,
     # General QC
     compute_cv,
     flag_missing_values,
@@ -106,7 +107,8 @@ __all__ = [
     # PRM — plate normalisation
     "plate_peptide_anova",
     "get_plate_conversion_factors",
-    "adjust_ratio_by_plate",
+    "plot_plate_conversion_factors",
+    # "adjust_ratio_by_plate",
     # PRM — general QC
     "compute_cv",
     "flag_missing_values",
