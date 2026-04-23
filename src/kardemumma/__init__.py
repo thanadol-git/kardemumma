@@ -39,6 +39,7 @@ from .prm import (
     get_plate_conversion_factors,
     plot_plate_conversion_factors,
     adjust_ratio_by_plate,
+    get_absolute_conc,
     # General QC
     compute_cv,
     flag_missing_values,
@@ -109,6 +110,7 @@ __all__ = [
     "get_plate_conversion_factors",
     "plot_plate_conversion_factors",
     "adjust_ratio_by_plate",
+    "get_absolute_conc",
     # PRM — general QC
     "compute_cv",
     "flag_missing_values",

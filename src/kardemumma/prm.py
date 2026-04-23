@@ -509,10 +509,73 @@ def adjust_ratio_by_plate(
     df["RatioLightToHeavy"] = df["RatioLightToHeavy"] / plate_factors.values
     return df
 
+
 # ---------------------------------------------------------------------------
-# General QC
+# Combine qRePS table with skyline_merge_adj
 # ---------------------------------------------------------------------------
 
+def get_absolute_conc(
+    qreps_table: pd.DataFrame,
+    skyline_df: pd.DataFrame,
+    skyline_protein_col: str = 'Protein Name',
+) -> pd.DataFrame:
+    """
+    Combine qRePS table with skyline_merge_adj.
+    """
+    # Check for necessary columns in both dataframes
+    if skyline_protein_col not in skyline_df.columns:
+        raise KeyError(f"Column '{skyline_protein_col}' not found in skyline_df.")
+    # Check if qRePS is in qreps_table
+    if 'qRePS' not in qreps_table.columns:
+        raise KeyError("Column 'qRePS' not found in qreps_table.")
+
+    # Extract qRePS id from skyline_df by looking at the skyline_protein_col column and extract text starting with QR followed by digits
+    skyline_df['qRePS'] = skyline_df[skyline_protein_col].str.extract(r'(QR\d+)')
+
+    # Merge skyline_df and qreps_table on 'qRePS'
+    combined_df = pd.merge(skyline_df, qreps_table, on='qRePS', how='left')
+
+    # Check for required columns after merge
+    for col in ["RatioLightToHeavy", "Amount per well [pmol]", "Peptide Sequence", "Protein Name", "Replicate"]:
+        if col not in combined_df.columns:
+            raise KeyError(f"Column '{col}' not found in the merged DataFrame.")
+
+    # Calculate absolute protein concentration [pmol]
+    combined_df["Protein conc [pmol]"] = (
+        combined_df["RatioLightToHeavy"] * combined_df["Amount per well [pmol]"]
+    ).round(4)
+
+    # Select columns to export
+    export_cols = ["qRePS", "Peptide Sequence", "Protein Name", "Replicate", "Protein conc [pmol]"]
+    combined_df = combined_df[export_cols]
+
+    # Pivot the combined dataframe to wide format
+    combined_df_wide = combined_df.pivot_table(
+        index=["qRePS", "Peptide Sequence", "Protein Name"],
+        columns="Replicate",
+        values="Protein conc [pmol]",
+        aggfunc="first"
+    )
+
+    if combined_df_wide.empty:
+        raise ValueError("Combined dataframe is empty. Please check the input data.")
+
+    # Report the counts of unique values in combined_df_wide for key columns
+    def _report_abs(df: pd.DataFrame) -> None:
+        idx = df.index
+        # idx is a MultiIndex with levels: 'qRePS', 'Peptide Sequence', 'Protein Name'
+        n_qreps = len(idx.get_level_values('qRePS').unique())
+        n_peptides = len(idx.get_level_values('Peptide Sequence').unique())
+        n_proteins = len(idx.get_level_values('Protein Name').unique())
+        n_replicates = len(df.columns.unique())
+        print(f"Number of unique qRePS ids: {n_qreps}")
+        print(f"Number of unique Peptide Sequences: {n_peptides}")
+        print(f"Number of unique Protein Names: {n_proteins}")
+        print(f"Number of unique Replicates: {n_replicates}")
+
+    _report_abs(combined_df_wide)
+
+    return combined_df_wide
 
 def compute_cv(
     df: pd.DataFrame,
