@@ -645,6 +645,35 @@ def summarize_prm(
         "median_cv_pct": round(median_cv, 2) if pd.notnull(median_cv) else None,
     }
 
+def adjust_ratio_by_plate(
+    df: pd.DataFrame, 
+    conversion_factors: dict, 
+    col_match: str = 'characteristics[Plate]'
+) -> pd.DataFrame:
+    """
+    Adjust the RatioLightToHeavy values in the DataFrame using provided plate conversion factors.
+
+    Args:
+        df: Input DataFrame (must contain "RatioLightToHeavy" and col_match columns).
+        conversion_factors: Dict mapping plate (col_match) values to correction factors.
+        col_match: Column in df whose values are matched against keys in conversion_factors.
+
+    Returns:
+        DataFrame with updated "RatioLightToHeavy" values normalized per plate.
+    """
+    df = df.copy()
+    if "RatioLightToHeavy" not in df.columns:
+        raise KeyError("DataFrame missing required column: 'RatioLightToHeavy'")
+    if col_match not in df.columns:
+        raise KeyError(f"DataFrame missing required column: '{col_match}'")
+
+    # Map the plate column to correction factor, then divide
+    factors = df[col_match].astype(str).map(conversion_factors)
+    if factors.isnull().any():
+        missing = df.loc[factors.isnull(), col_match].unique()
+        raise KeyError(f"Some plate values have no conversion factor: {missing}")
+    df["RatioLightToHeavy"] = df["RatioLightToHeavy"] / factors.values
+    return df
 
 # ---------------------------------------------------------------------------
 # Plots
