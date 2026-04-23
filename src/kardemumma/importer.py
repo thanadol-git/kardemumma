@@ -357,9 +357,30 @@ class MergeFiles:
         col_sample: str = "characteristics[Sample]",
         sample_value: str = "Pool",
     ) -> pd.DataFrame:
-        """Filter *df* to rows where *col_sample* equals *sample_value*."""
-        return (
+        """
+        Filter *df* to rows where *col_sample* equals *sample_value*.
+
+        Prints a summary of unique sample counts in each plate for the filtered data.
+        """
+        
+        # Function to summarize the number of samples per plate
+        def _summarize_samples_per_plate(
+            input_df: pd.DataFrame,
+            plate_col: str = "characteristics[Plate]",
+            source_col: str = "source name",
+        ) -> None:
+            counts = input_df.groupby(plate_col)[source_col].nunique()
+            for plate, count in counts.items():
+                print(f"Plate {plate}: {count} unique source names")
+           
+
+        filtered = (
             df[df[col_sample] == sample_value]
             .sort_values(["Replicate", "Peptide", "Isotope Label Type"])
             .reset_index(drop=True)
         )
+
+        print("Summary of samples per plate:")
+        _summarize_samples_per_plate(filtered)
+
+        return filtered
