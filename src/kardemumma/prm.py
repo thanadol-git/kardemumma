@@ -329,7 +329,7 @@ def plate_peptide_anova(
     """
     df = _formula_clean_frame(selected_norm_peptides.copy())
 
-    # Normalise plate column name to "Plate"
+    # Normalize plate column
     if plate_col in df.columns and plate_col != "Plate":
         df = df.drop(columns=["Plate"], errors="ignore").rename(columns={plate_col: "Plate"})
     elif "characteristics[Plate]" in df.columns:
@@ -337,7 +337,7 @@ def plate_peptide_anova(
             columns={"characteristics[Plate]": "Plate"}
         )
 
-    # Normalise peptide column name to "Peptide"
+    # Normalize peptide column
     if "Peptide Sequence" in df.columns:
         df = df.drop(columns=["Peptide"], errors="ignore").rename(
             columns={"Peptide Sequence": "Peptide"}
@@ -345,27 +345,23 @@ def plate_peptide_anova(
 
     df = _formula_clean_frame(df)
 
-    missing = [c for c in ("RatioLightToHeavy", "Plate", "Peptide") if c not in df.columns]
+    required_cols = ["RatioLightToHeavy", "Plate", "Peptide"]
+    missing = [c for c in required_cols if c not in df.columns]
     if missing:
         raise KeyError(f"plate_peptide_anova missing columns {missing!r}. Have: {list(df.columns)!r}")
 
-    ratio = pd.to_numeric(_patsy_scalar_categorical(_as_1d_series(df, "RatioLightToHeavy")), errors="coerce")
-    plate = _patsy_scalar_categorical(_as_1d_series(df, "Plate"))
-    peptide = _patsy_scalar_categorical(_as_1d_series(df, "Peptide"))
-
-    df = (
-        pd.DataFrame({"RatioLightToHeavy": ratio, "Plate": plate, "Peptide": peptide})
-        .dropna(subset=["RatioLightToHeavy", "Plate", "Peptide"])
-        .reset_index(drop=True)
-    )
+    # Parse columns and drop NA
+    df = df.loc[:, required_cols].dropna().reset_index(drop=True)
     df["Plate"] = df["Plate"].astype(str)
     df["Peptide"] = df["Peptide"].astype(str)
+    df["RatioLightToHeavy"] = pd.to_numeric(df["RatioLightToHeavy"], errors="coerce")
 
     if df.empty:
         raise ValueError("plate_peptide_anova: no rows left after dropping missing values.")
 
+    # Response column
     if log_transform:
-        df = df.loc[df["RatioLightToHeavy"] > 0].copy().reset_index(drop=True)
+        df = df[df["RatioLightToHeavy"] > 0].copy().reset_index(drop=True)
         if df.empty:
             raise ValueError("plate_peptide_anova: no positive RatioLightToHeavy rows for log_transform.")
         df["response"] = np.log(df["RatioLightToHeavy"])
@@ -377,14 +373,14 @@ def plate_peptide_anova(
     logger.info("OLS model summary:\n%s", model.summary())
     logger.info("Type II ANOVA table:\n%s", anova_res)
 
-    def _p_from_anova(label_substr: str) -> Optional[float]:
-        rows = [i for i in anova_res.index if label_substr in str(i).lower()]
-        if not rows:
-            return None
-        pr_col = next((c for c in anova_res.columns if "PR" in c or c.startswith("P")), None)
-        return anova_res.loc[rows[0], pr_col] if pr_col else None
+    def _get_p_value(keyword: str):
+        # Try to get the p-value column (works for both PR(>F), PR(>F), or "P" columns)
+        label_rows = [idx for idx in anova_res.index if keyword in str(idx).lower()]
+        pr_col = next((c for c in anova_res.columns if c.upper().startswith("P")), None)
+        return None if (not label_rows or not pr_col) else anova_res.loc[label_rows[0], pr_col]
 
-    for label, p_val in (("Plate", _p_from_anova("plate")), ("Peptide", _p_from_anova("peptide"))):
+    for label in ["Plate", "Peptide"]:
+        p_val = _get_p_value(label.lower())
         if p_val is not None and pd.notna(p_val):
             logger.info("%s effect p-value (Type II ANOVA): %.4g", label, p_val)
             if label == "Plate":
@@ -408,9 +404,8 @@ def get_plate_conversion_factors(
     Calculate per-plate multiplicative correction factors.
 
     Returns:
-        ``(platemed_df, conversion_factors, model)`` where *platemed_df* contains
-        plate medians and factors, *conversion_factors* is a ``{plate: factor}`` dict,
-        and *model* is the fitted OLS object.
+        (platemed_df, conversion_factors, model): plate medians and factors,
+        {plate: factor} dict, and statsmodels OLS fit object.
     """
     cols = ["Peptide Sequence", "Replicate", col_plate, ratio_col]
     missing_cols = [c for c in cols if c not in df.columns]
@@ -418,7 +413,7 @@ def get_plate_conversion_factors(
         raise KeyError(f"Missing required columns: {missing_cols}")
 
     d = df[cols].drop_duplicates().copy()
-    d = d.assign(ratio_fit=pd.to_numeric(d[ratio_col], errors="coerce"))
+    d["ratio_fit"] = pd.to_numeric(d[ratio_col], errors="coerce")
     if log_transform:
         d["ratio_fit"] = np.log(d["ratio_fit"])
 
@@ -432,8 +427,9 @@ def get_plate_conversion_factors(
         .reset_index()
         .rename(columns={"ratio_fit": "plate_median"})
     )
-    platemed["correction_factor"] = d["ratio_fit"].median() / platemed["plate_median"]
-    conversion_factors = {str(row[col_plate]): row["correction_factor"] for _, row in platemed.iterrows()}
+    global_median = d["ratio_fit"].median()
+    platemed["correction_factor"] = global_median / platemed["plate_median"]
+    conversion_factors = dict(zip(platemed[col_plate].astype(str), platemed["correction_factor"]))
     return platemed, conversion_factors, model
 
 
@@ -442,10 +438,9 @@ def plot_plate_conversion_factors(
     col_plate: str = "Plate",
     ratio_col: str = "RatioLightToHeavy",
     log_transform: bool = False,
-) -> pd.DataFrame:
+):
     """
-    Based on the plate conversion factors, plot the liner line and color the points by plate. 
-    On x axes are all selected peptides (Peptide Sequence), and on y axes are ratio_fit.
+    Plot peptide sequence vs ratio_fit colored by plate.
     """
     cols = ["Peptide Sequence", "Replicate", col_plate, ratio_col]
     missing_cols = [c for c in cols if c not in df.columns]
@@ -453,7 +448,7 @@ def plot_plate_conversion_factors(
         raise KeyError(f"Missing required columns: {missing_cols}")
 
     d = df[cols].drop_duplicates().copy()
-    d = d.assign(ratio_fit=pd.to_numeric(d[ratio_col], errors="coerce"))
+    d["ratio_fit"] = pd.to_numeric(d[ratio_col], errors="coerce")
     if log_transform:
         d["ratio_fit"] = np.log(d["ratio_fit"])
 
@@ -462,32 +457,57 @@ def plot_plate_conversion_factors(
     ).fit()
 
     plot_df = d[["Peptide Sequence", col_plate, "ratio_fit"]]
-    
-    # Plot Peptide Sequence vs ratio_fit and color by plate
-    # Compute average ratio_fit for each peptide
     peptide_means = plot_df.groupby("Peptide Sequence", observed=True)["ratio_fit"].mean().sort_values()
     ordered_peptides = peptide_means.index.tolist()
-    # Create a categorical type for the ordering
+    # Use categorical dtype for peptide order
     plot_df["Peptide Sequence"] = pd.Categorical(
         plot_df["Peptide Sequence"], categories=ordered_peptides, ordered=True
     )
     plt.figure(figsize=(10, 6))
     sns.boxplot(
-        x="Peptide Sequence", 
-        y="ratio_fit", 
-        hue=col_plate, 
-        data=plot_df, 
+        x="Peptide Sequence",
+        y="ratio_fit",
+        hue=col_plate,
+        data=plot_df,
         dodge=True,
         showfliers=False,
     )
-    plt.title("Peptide Sequence vs Ratio Fit Boxplot Colored by Plate")
+    plt.title("Peptide Sequence vs Ratio Fit (by Plate)")
     plt.xlabel("Peptide Sequence")
     plt.ylabel("Ratio Fit")
     plt.xticks(rotation=90)
     plt.tight_layout()
     plt.show()
     return plt.gcf()
-    
+
+
+def adjust_ratio_by_plate(
+    df: pd.DataFrame,
+    conversion_factors: dict,
+    col_match: str = 'characteristics[Plate]'
+) -> pd.DataFrame:
+    """
+    Adjust the RatioLightToHeavy values using provided plate conversion factors.
+
+    Args:
+        df: Input DataFrame (must contain "RatioLightToHeavy" and col_match columns).
+        conversion_factors: Dict mapping plate values (col_match) to correction factors.
+        col_match: Column whose values match the keys in conversion_factors.
+
+    Returns:
+        DataFrame with updated "RatioLightToHeavy" values normalized per plate.
+    """
+    df = df.copy()
+    if "RatioLightToHeavy" not in df.columns:
+        raise KeyError("DataFrame missing required column: 'RatioLightToHeavy'")
+    if col_match not in df.columns:
+        raise KeyError(f"DataFrame missing required column: '{col_match}'")
+    plate_factors = df[col_match].astype(str).map(conversion_factors)
+    if plate_factors.isnull().any():
+        missing = df.loc[plate_factors.isnull(), col_match].unique()
+        raise KeyError(f"Some plate values have no conversion factor: {missing}")
+    df["RatioLightToHeavy"] = df["RatioLightToHeavy"] / plate_factors.values
+    return df
 
 # ---------------------------------------------------------------------------
 # General QC
@@ -644,36 +664,6 @@ def summarize_prm(
         "pct_rt_within": round(pct_rt_within, 2) if pd.notnull(pct_rt_within) else None,
         "median_cv_pct": round(median_cv, 2) if pd.notnull(median_cv) else None,
     }
-
-def adjust_ratio_by_plate(
-    df: pd.DataFrame, 
-    conversion_factors: dict, 
-    col_match: str = 'characteristics[Plate]'
-) -> pd.DataFrame:
-    """
-    Adjust the RatioLightToHeavy values in the DataFrame using provided plate conversion factors.
-
-    Args:
-        df: Input DataFrame (must contain "RatioLightToHeavy" and col_match columns).
-        conversion_factors: Dict mapping plate (col_match) values to correction factors.
-        col_match: Column in df whose values are matched against keys in conversion_factors.
-
-    Returns:
-        DataFrame with updated "RatioLightToHeavy" values normalized per plate.
-    """
-    df = df.copy()
-    if "RatioLightToHeavy" not in df.columns:
-        raise KeyError("DataFrame missing required column: 'RatioLightToHeavy'")
-    if col_match not in df.columns:
-        raise KeyError(f"DataFrame missing required column: '{col_match}'")
-
-    # Map the plate column to correction factor, then divide
-    factors = df[col_match].astype(str).map(conversion_factors)
-    if factors.isnull().any():
-        missing = df.loc[factors.isnull(), col_match].unique()
-        raise KeyError(f"Some plate values have no conversion factor: {missing}")
-    df["RatioLightToHeavy"] = df["RatioLightToHeavy"] / factors.values
-    return df
 
 # ---------------------------------------------------------------------------
 # Plots
