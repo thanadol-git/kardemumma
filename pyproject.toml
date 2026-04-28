@@ -21,6 +21,7 @@ dependencies = [
     "seaborn",
     "statsmodels",
     "sdrf-pipelines[ontology]",
+    "matplotlib-venn",
 ]
 
 [tool.setuptools.packages.find]
