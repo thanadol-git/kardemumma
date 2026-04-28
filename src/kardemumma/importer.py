@@ -261,6 +261,8 @@ class ImportSDRFFile:
     def import_sdrf_file(self) -> pd.DataFrame:
         """Read and return the SDRF file as a DataFrame."""
         _validate_path(self.file_path, ".tsv")
+        
+        
         return pd.read_csv(self.file_path, sep="\t")
 
     def info(self) -> None:
