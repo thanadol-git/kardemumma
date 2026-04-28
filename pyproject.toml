@@ -22,6 +22,7 @@ dependencies = [
     "statsmodels",
     "sdrf-pipelines[ontology]",
     "matplotlib-venn",
+    "scikit-learn",
 ]
 
 [tool.setuptools.packages.find]
