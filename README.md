@@ -23,7 +23,7 @@ You can install the dependencies and set up the environment using [Conda](https:
 
    Alternatively, if you want to use a unique environment name:
    ```bash
-   conda env create -f environment.yml -n skyline-qc
+   conda env create -f environment.yml -n kardemumma
    ```
 
 3. Activate the environment:
@@ -32,12 +32,13 @@ You can install the dependencies and set up the environment using [Conda](https:
    ```
    or, if you used an environment name:
    ```bash
-   conda activate skyline-qc
+   conda activate kardemumma
    ```
 
 4. Install the package in editable mode:
    ```bash
    pip install -e .
+   ```
    ```
 
 ## Available pipelines
