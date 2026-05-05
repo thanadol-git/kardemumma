@@ -1,0 +1,35 @@
+# create a conda env with 'conda env create -f environment.yml -prefix [path]'
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+  - anaconda
+
+
+dependencies:
+  - python=3.10 # 3.10 bugs out some dependencies
+  - openms
+  - scipy
+  - pip
+  - ipykernel
+  - pip:
+    - -e .
+    - matplotlib
+    - pandas
+    - scikit-learn
+    - openpyxl
+    - seaborn
+    - venn
+    - lxml
+    - pridepy
+    - requests
+    - pyopenms
+    - ppx
+    - ipython
+    - pyteomics
+    - biomart
+    - PyImpetus
+
+
+# https://gist.github.com/33eyes/431e3d432f73371509d176d0dfb95b6e
+# Follow this link for notebook setup 

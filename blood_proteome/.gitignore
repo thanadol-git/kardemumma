@@ -1,0 +1,14 @@
+# Folder
+env
+__pycache__
+*.pyc
+*.pyo
+
+diannsummary 
+DE
+plot
+export
+Files
+targeted
+# Files
+.vscode
