@@ -325,7 +325,7 @@ class MergeFiles:
         Merge Skyline with SDRF on Replicate / source name.
 
         Adds a ``characteristics[Plate]`` column extracted from the replicate name
-        (e.g. ``Plate_3_...`` → ``"3"``).
+        (e.g. ``Plate_3_...`` → ``"3"`` or ``Plate3_...`` → ``"3"``).
         """
         skyline_df = (
             self.skyline_df[self.skyline_df["Peptide"].isin(self.selected_peptides)].copy()
@@ -349,7 +349,9 @@ class MergeFiles:
             how="left",
         )
         merged["characteristics[Plate]"] = merged["Replicate"].str.extract(
-            r"Plate_(\d+)", expand=False
+            r"Plate_?(\d+)", expand=False
+       
+       
         )
         return merged
 
