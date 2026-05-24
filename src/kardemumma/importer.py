@@ -301,8 +301,26 @@ class ImportSDRFFile:
         print(f"qREPs lot number: {lot_number}")
         return lot_number
 
-
 class MergeFiles:
+    @staticmethod
+    def compare_file_names(
+        skyline_df: pd.DataFrame,
+        sdrf_df: pd.DataFrame
+    ) -> None:
+        """
+        Print overlaps and differences of sample file names between Skyline and SDRF DataFrames.
+        """
+        skyline_files = set(skyline_df["File Name"])
+        sdrf_files = set(sdrf_df["comment[data file]"])
+        not_in_sdrf = skyline_files - sdrf_files
+        not_in_skyline = sdrf_files - skyline_files
+
+        print("Sample names in Skyline but not in SDRF:")
+        print(not_in_sdrf if not_in_sdrf else "  (none)")
+        print("-" * 40)
+        print("Sample names in SDRF but not in Skyline:")
+        print(not_in_skyline if not_in_skyline else "  (none)")
+
     def __init__(
         self,
         skyline_df: pd.DataFrame,
@@ -311,80 +329,80 @@ class MergeFiles:
     ):
         """
         Args:
-            skyline_df: Skyline long-format report (must include ``Replicate``, ``Peptide``).
-            sdrf_df: SDRF table (must include ``source name``, ``characteristics[Sample]``).
-            selected_peptides: Restrict ``skyline_df`` to these ``Peptide`` values before
-                merging. If ``None``, all peptides are kept.
+            skyline_df: Skyline long-format DataFrame (must include ``Replicate``, ``Peptide``).
+            sdrf_df: SDRF DataFrame (must include ``source name``, ``characteristics[Sample]``, characteristics[plate]).
+            selected_peptides: Optional; restrict ``skyline_df`` to these ``Peptide`` values.
         """
+        self.compare_file_names(skyline_df, sdrf_df)
         self.skyline_df = skyline_df
         self.sdrf_df = sdrf_df
         self.selected_peptides = selected_peptides
 
     def merge_files(self) -> pd.DataFrame:
         """
-        Merge Skyline with SDRF on Replicate / source name.
-
-        Adds a ``characteristics[Plate]`` column extracted from the replicate name
-        (e.g. ``Plate_3_...`` → ``"3"`` or ``Plate3_...`` → ``"3"``).
+        Merge Skyline with SDRF on Replicate and source name (left join). Raise if columns are missing.
         """
-        skyline_df = (
-            self.skyline_df[self.skyline_df["Peptide"].isin(self.selected_peptides)].copy()
-            if self.selected_peptides is not None
-            else self.skyline_df
-        )
+        # Check if selected_peptides is provided and subset if so
+        if self.selected_peptides is not None:
+            skyline_df = self.skyline_df[self.skyline_df["Peptide"].isin(self.selected_peptides)].copy()
+        else:
+            skyline_df = self.skyline_df
 
-        for label, frame, cols in (
-            ("skyline_df", skyline_df, ["Replicate"]),
-            ("sdrf_df", self.sdrf_df, ["source name", "characteristics[Sample]"]),
-        ):
-            missing = [c for c in cols if c not in frame.columns]
-            if missing:
-                raise ValueError(f"Missing column(s) {missing} in {label}")
+        # Columns required for merging
+        required_skyline_cols = ["File Name"]
+        required_sdrf_cols = ["comment[data file]", "characteristics[Sample]", "characteristics[plate]"]
 
-        merged = pd.merge(
+        # Check for required columns in Skyline dataframe
+        missing_skyline = [c for c in required_skyline_cols if c not in skyline_df.columns]
+        if missing_skyline:
+            raise ValueError(f"Missing column(s) {missing_skyline} in skyline_df")
+
+        # Check for required columns in SDRF dataframe
+        missing_sdrf = [c for c in required_sdrf_cols if c not in self.sdrf_df.columns]
+        if missing_sdrf:
+            raise ValueError(f"Missing column(s) {missing_sdrf} in sdrf_df")
+
+        # Perform left merge of Skyline with selected columns from SDRF
+        merged_df = pd.merge(
             skyline_df,
-            self.sdrf_df[["source name", "characteristics[Sample]"]],
-            left_on="Replicate",
-            right_on="source name",
-            how="left",
+            self.sdrf_df[required_sdrf_cols],
+            left_on="File Name",
+            right_on="comment[data file]",
+            how="left"
         )
-        merged["characteristics[Plate]"] = merged["Replicate"].str.extract(
-            r"Plate_?(\d+)", expand=False
-       
-       
-        )
-        return merged
+        return merged_df
 
     def select_pool_data(
         self,
-        df: pd.DataFrame,
         col_sample: str = "characteristics[Sample]",
         sample_value: str = "Pool",
     ) -> pd.DataFrame:
         """
-        Filter *df* to rows where *col_sample* equals *sample_value*.
+        Filter merged DataFrame to rows where *col_sample* equals *sample_value*.
 
         Prints a summary of unique sample counts in each plate for the filtered data.
         """
-        
-        # Function to summarize the number of samples per plate
         def _summarize_samples_per_plate(
             input_df: pd.DataFrame,
-            plate_col: str = "characteristics[Plate]",
-            source_col: str = "source name",
+            plate_col: str = "characteristics[plate]",
+            source_col: str = "comment[data file]",
         ) -> None:
+            if plate_col not in input_df.columns:
+                print(f"  Column '{plate_col}' not in DataFrame; cannot summarize by plate.")
+                return
             counts = input_df.groupby(plate_col)[source_col].nunique()
-            for plate, count in counts.items():
-                print(f"Plate {plate}: {count} unique source names")
-           
-
+            if counts.empty:
+                print("  No plates found.")
+            else:
+                for plate, count in counts.items():
+                    print(f"Plate {plate}: {count} unique comment[data file] names")
+        
+        merged_df = self.merge_files()
         filtered = (
-            df[df[col_sample] == sample_value]
+            merged_df[merged_df[col_sample] == sample_value]
             .sort_values(["Replicate", "Peptide", "Isotope Label Type"])
             .reset_index(drop=True)
         )
-
         print("Summary of samples per plate:")
         _summarize_samples_per_plate(filtered)
-
         return filtered
