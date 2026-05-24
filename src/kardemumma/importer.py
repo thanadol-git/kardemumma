@@ -21,7 +21,6 @@ _SKYLINE_EXPECTED_COLS = [
     "Replicate",
     "File Name",
     "Peptide Retention Time",
-    "Retention Time Calculator Score",
     "Predicted Retention Time",
     "Precursor Charge",
     "Peptide Sequence",
