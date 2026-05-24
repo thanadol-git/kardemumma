@@ -490,7 +490,8 @@ def plot_plate_conversion_factors(
 def adjust_ratio_by_plate(
     df: pd.DataFrame,
     conversion_factors: dict,
-    col_match: str = 'characteristics[plate]'
+    col_match: str = "characteristics[plate]",
+    ignore_nan_plates: bool = True,
 ) -> pd.DataFrame:
     """
     Adjust the RatioLightToHeavy values using provided plate conversion factors.
@@ -508,12 +509,17 @@ def adjust_ratio_by_plate(
         raise KeyError("DataFrame missing required column: 'RatioLightToHeavy'")
     if col_match not in df.columns:
         raise KeyError(f"DataFrame missing required column: '{col_match}'")
+    if ignore_nan_plates:
+        df = df[df[col_match].notna()].copy()
     plate_factors = df[col_match].astype(str).map(conversion_factors)
     if plate_factors.isnull().any():
         missing = df.loc[plate_factors.isnull(), col_match].unique()
-        raise KeyError(f"Some plate values have no conversion factor: {missing}")
+        raise KeyError(
+            f"Some plate values have no conversion factor: {missing}"
+        )
     df["RatioLightToHeavy"] = df["RatioLightToHeavy"] / plate_factors.values
     return df
+
 
 
 # ---------------------------------------------------------------------------
