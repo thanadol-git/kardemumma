@@ -340,6 +340,7 @@ class MergeFiles:
     def merge_files(self) -> pd.DataFrame:
         """
         Merge Skyline with SDRF on Replicate and source name (left join). Raise if columns are missing.
+        Also merges any SDRF columns that start with 'factor value'.
         """
         # Check if selected_peptides is provided and subset if so
         if self.selected_peptides is not None:
@@ -350,6 +351,10 @@ class MergeFiles:
         # Columns required for merging
         required_skyline_cols = ["File Name"]
         required_sdrf_cols = ["comment[data file]", "characteristics[Sample]", "characteristics[plate]"]
+
+        # Add all columns in sdrf_df that start with 'factor value'
+        factor_value_cols = [col for col in self.sdrf_df.columns if col.startswith("factor value")]
+        all_sdrf_cols = required_sdrf_cols + factor_value_cols
 
         # Check for required columns in Skyline dataframe
         missing_skyline = [c for c in required_skyline_cols if c not in skyline_df.columns]
@@ -364,7 +369,7 @@ class MergeFiles:
         # Perform left merge of Skyline with selected columns from SDRF
         merged_df = pd.merge(
             skyline_df,
-            self.sdrf_df[required_sdrf_cols],
+            self.sdrf_df[all_sdrf_cols],
             left_on="File Name",
             right_on="comment[data file]",
             how="left"
