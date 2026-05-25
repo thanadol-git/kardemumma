@@ -7,7 +7,7 @@ Run with:  pytest tests/test_prm.py -v
 import math
 
 import pandas as pd
-import pytest
+import pytestimage.png
 
 from skyline_qc.prm import (
     compute_cv,
