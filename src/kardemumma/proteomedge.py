@@ -8,6 +8,17 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 
+def _coerce_lot_arg(link_or_lot) -> str:
+    """Normalize lot number or URL from str, int, numpy/pandas scalars, etc."""
+    if isinstance(link_or_lot, str):
+        return link_or_lot.strip()
+    if hasattr(link_or_lot, "item"):
+        link_or_lot = link_or_lot.item()
+    if isinstance(link_or_lot, float) and link_or_lot.is_integer():
+        link_or_lot = int(link_or_lot)
+    return str(link_or_lot).strip()
+
+
 def fetch_qreps_table(link_or_lot) -> pd.DataFrame:
     """
     Fetch the qRePS data table for a given lot number or full ProteomEdge lot URL.
@@ -21,12 +32,9 @@ def fetch_qreps_table(link_or_lot) -> pd.DataFrame:
     Raises:
         ValueError: If the qRePS table cannot be found at the specified page.
     """
-    # Accept non-string input like numpy.int64, int, float, etc.
-    # Coerce to string safely before further processing
-    if not isinstance(link_or_lot, str):
-        link_or_lot = str(link_or_lot)
+    link_or_lot = _coerce_lot_arg(link_or_lot)
 
-    if link_or_lot.strip().startswith("http"):
+    if link_or_lot.startswith("http"):
         url = link_or_lot.strip()
     else:
         lot_str = link_or_lot.strip().strip("/")
@@ -78,6 +86,7 @@ def extract_lot_number(link_or_lot: str) -> str:
     Raises:
         ValueError: If a URL is provided but the lot number cannot be extracted.
     """
+    link_or_lot = _coerce_lot_arg(link_or_lot)
     url_pattern = r'/lotdata/(\w+)/'
     if link_or_lot.startswith("http"):
         match = re.search(url_pattern, link_or_lot)
@@ -204,6 +213,7 @@ def _fasta_url_for_lot(link_or_lot: str) -> tuple[str, str]:
     """
     from urllib.parse import urljoin
 
+    link_or_lot = _coerce_lot_arg(link_or_lot)
     lot_number = extract_lot_number(link_or_lot)
     page_url = (
         link_or_lot if _is_url(link_or_lot)
