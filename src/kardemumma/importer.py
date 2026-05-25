@@ -297,6 +297,11 @@ class ImportSDRFFile:
                 f"found {len(lot_numbers)}: {lot_numbers}"
             )
         lot_number = lot_numbers[0]
+        if hasattr(lot_number, "item"):
+            lot_number = lot_number.item()
+        if isinstance(lot_number, float) and lot_number.is_integer():
+            lot_number = int(lot_number)
+        lot_number = str(lot_number).strip()
         print(f"qREPs lot number: {lot_number}")
         return lot_number
 

@@ -258,8 +258,9 @@ def fetch_fasta(link_or_lot: str) -> pd.DataFrame:
         requests.HTTPError: If any HTTP request fails.
     """
     _, fasta_text = _fasta_url_for_lot(link_or_lot)
-    return _parse_fasta(fasta_text)
-
+    
+    df = _parse_fasta(fasta_text)
+    return df[["id", "sequence"]]
 
 def save_fasta(link_or_lot: str, out_file: str | None = None) -> tuple[pd.DataFrame, str]:
     """
