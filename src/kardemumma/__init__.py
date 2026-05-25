@@ -77,6 +77,14 @@ from .proteomedge import (
     fetch_fasta,
     save_fasta,
 )
+from .uniprot import (
+    get_protein_sequences_batch,
+    get_swissprot_sequences_batch,
+    query_human_proteome,
+    write_fasta,
+    create_human_proteome_fasta,
+    validate_fasta,
+)
 
 __all__ = [
     # Client
@@ -145,4 +153,11 @@ __all__ = [
     "load_qRePs_to_csv",
     "fetch_fasta",
     "save_fasta",
+    # UniProt
+    "get_protein_sequences_batch",
+    "get_swissprot_sequences_batch",
+    "query_human_proteome",
+    "write_fasta",
+    "create_human_proteome_fasta",
+    "validate_fasta",
 ]

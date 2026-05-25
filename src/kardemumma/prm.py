@@ -5,11 +5,14 @@ This module provides functions to assess quantification quality from Skyline
 PRM reports. It expects a DataFrame produced by ``ImportFile.import_skyline_file``
 and works with the following key columns:
 
-- ``Precursor``               – precursor ion string (sequence + charge)
+- ``Precursor``               – precursor ion string (sequence + charge) 
+Protein/Peptide/Precursors/Precursor
 - ``Replicate``               – replicate / sample label
+Replicates/Replicate
 - ``File Name``               – raw data file name
 - ``Peptide Sequence``        – stripped peptide sequence
 - ``Peptide``                 – modified peptide string
+Peptides/Peptide
 - ``Protein Name``            – protein identifier
 - ``Normalized Area``         – normalised peak area
 - ``RatioLightToHeavy``       – light-to-heavy ratio (AQUA / SIS quantification)
@@ -212,14 +215,14 @@ def report_peptide_protein_summary(
 
 def calculate_intra_plate_cv(
     pool_data: pd.DataFrame,
-    col_name: str = "characteristics[Plate]",
+    col_name: str = "characteristics[plate]",
 ) -> pd.DataFrame:
     """
     Calculate intra-plate CV per peptide.
 
     Args:
         pool_data: DataFrame with at least ``[col_name, 'Peptide Sequence', 'RatioLightToHeavy']``.
-        col_name: Column to group by. Default ``'characteristics[Plate]'``.
+        col_name: Column to group by. Default ``'characteristics[plate]'``.
 
     Returns:
         DataFrame with ``mean``, ``std``, and ``intra_plate_cv`` per plate/peptide.
@@ -313,7 +316,7 @@ def extract_top_percentile(
 
 def plate_peptide_anova(
     selected_norm_peptides: pd.DataFrame,
-    plate_col: str = "characteristics[Plate]",
+    plate_col: str = "characteristics[plate]",
     log_transform: bool = False,
 ) -> Tuple:
     """
@@ -332,9 +335,9 @@ def plate_peptide_anova(
     # Normalize plate column
     if plate_col in df.columns and plate_col != "Plate":
         df = df.drop(columns=["Plate"], errors="ignore").rename(columns={plate_col: "Plate"})
-    elif "characteristics[Plate]" in df.columns:
+    elif "characteristics[plate]" in df.columns:
         df = df.drop(columns=["Plate"], errors="ignore").rename(
-            columns={"characteristics[Plate]": "Plate"}
+            columns={"characteristics[plate]": "Plate"}
         )
 
     # Normalize peptide column
@@ -430,6 +433,9 @@ def get_plate_conversion_factors(
     global_median = d["ratio_fit"].median()
     platemed["correction_factor"] = global_median / platemed["plate_median"]
     conversion_factors = dict(zip(platemed[col_plate].astype(str), platemed["correction_factor"]))
+    
+    # Print the conversion factors
+    print(f"Conversion factors: {conversion_factors}")
     return platemed, conversion_factors, model
 
 
@@ -484,7 +490,8 @@ def plot_plate_conversion_factors(
 def adjust_ratio_by_plate(
     df: pd.DataFrame,
     conversion_factors: dict,
-    col_match: str = 'characteristics[Plate]'
+    col_match: str = "characteristics[plate]",
+    ignore_nan_plates: bool = True,
 ) -> pd.DataFrame:
     """
     Adjust the RatioLightToHeavy values using provided plate conversion factors.
@@ -502,12 +509,17 @@ def adjust_ratio_by_plate(
         raise KeyError("DataFrame missing required column: 'RatioLightToHeavy'")
     if col_match not in df.columns:
         raise KeyError(f"DataFrame missing required column: '{col_match}'")
+    if ignore_nan_plates:
+        df = df[df[col_match].notna()].copy()
     plate_factors = df[col_match].astype(str).map(conversion_factors)
     if plate_factors.isnull().any():
         missing = df.loc[plate_factors.isnull(), col_match].unique()
-        raise KeyError(f"Some plate values have no conversion factor: {missing}")
+        raise KeyError(
+            f"Some plate values have no conversion factor: {missing}"
+        )
     df["RatioLightToHeavy"] = df["RatioLightToHeavy"] / plate_factors.values
     return df
+
 
 
 # ---------------------------------------------------------------------------
@@ -787,7 +799,7 @@ def plot_peptide_counts(df: pd.DataFrame) -> None:
 def plot_pool_boxplot(
     pool_df: pd.DataFrame,
     col_ratio: str = "RatioLightToHeavy",
-    col_plate: str = "characteristics[Plate]",
+    col_plate: str = "characteristics[plate]",
 ) -> None:
     """
     Boxplot of *col_ratio* (log scale) by Replicate, colored by Plate.
@@ -845,7 +857,7 @@ def plot_pool_heatmap(pool_data: pd.DataFrame, aggfunc: str = "mean") -> None:
 
 def plot_intra_plate_cv_stats(
     peptide_plate_stats: pd.DataFrame,
-    col_name: str = "characteristics[Plate]",
+    col_name: str = "characteristics[plate]",
 ) -> None:
     """
     Boxplot of intra-plate CV per plate.
@@ -857,7 +869,7 @@ def plot_intra_plate_cv_stats(
     plt.figure(figsize=(10, 6))
     sns.boxplot(x=col_name, y="intra_plate_cv", data=peptide_plate_stats)
     plt.title("Intra-Plate CV for Pool")
-    plt.xlabel(col_name.replace("characteristics[", "").replace("]", "").capitalize())
+    plt.xlabel(col_name.replace("characteristics[", "").replace("]", "").replace("plate", "Plate").capitalize())
     plt.ylabel("Intra-Plate CV")
     plt.show()
 
