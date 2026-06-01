@@ -1,11 +1,40 @@
 # scrape concentration data from the web
 
 import io
+import logging
 import re
+import time
 from datetime import datetime
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
+
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+
+def _get_with_retry(url: str, retries: int = 3, **kwargs) -> requests.Response:
+    delay = 1.0
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, **kwargs)
+            if response.ok:
+                return response
+            if response.status_code in _RETRY_STATUSES and attempt < retries - 1:
+                logger.warning("HTTP %d on attempt %d, retrying in %.1fs", response.status_code, attempt + 1, delay)
+                time.sleep(delay)
+                delay *= 2
+                continue
+            response.raise_for_status()
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            if attempt < retries - 1:
+                logger.warning("Request error on attempt %d, retrying in %.1fs: %s", attempt + 1, delay, exc)
+                time.sleep(delay)
+                delay *= 2
+            else:
+                raise
+    raise RuntimeError(f"Failed to GET {url} after {retries} attempts")
 
 
 def _coerce_lot_arg(link_or_lot) -> str:
@@ -40,8 +69,7 @@ def fetch_qreps_table(link_or_lot) -> pd.DataFrame:
         lot_str = link_or_lot.strip().strip("/")
         url = f"https://proteomedge.com/lotdata/{lot_str}/"
 
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
+    response = _get_with_retry(url, timeout=30)
 
     all_tables = pd.read_html(io.StringIO(response.text))
     for table in all_tables:
@@ -109,31 +137,13 @@ def summarise_qRePs(lot_or_url: str) -> None:
     Returns:
         None
     """
-    import re
-
     try:
         df = fetch_qreps_table(lot_or_url)
     except Exception as e:
         print(f"Failed to fetch qRePS table: {e}")
         return
 
-    # Try to fetch information from the QRePs summary table, if possible
     lot_number = extract_lot_number(lot_or_url)
-    url = (
-        lot_or_url
-        if _is_url(lot_or_url)
-        else f"https://proteomedge.com/lotdata/{lot_number}/"
-    )
-
-
-    try:
-        response = requests.get(url if url.startswith("http") else "https://" + url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "lxml")
-    except Exception as e:
-        print(f"Could not retrieve or parse webpage: {e}")
-        print("Printing available summary from the data table only.")
-        soup = None
 
     product_name = None
     # Override the description with the known expected value.
@@ -222,8 +232,7 @@ def _fasta_url_for_lot(link_or_lot: str) -> tuple[str, str]:
     if not page_url.startswith("http"):
         page_url = "https://" + page_url
 
-    page = requests.get(page_url, timeout=30)
-    page.raise_for_status()
+    page = _get_with_retry(page_url, timeout=30)
     soup = BeautifulSoup(page.text, "lxml")
 
     fasta_tag = soup.find("a", href=re.compile(r"\.fasta", re.I))
@@ -234,8 +243,7 @@ def _fasta_url_for_lot(link_or_lot: str) -> tuple[str, str]:
     if not fasta_href.startswith("http"):
         fasta_href = urljoin(page_url, fasta_href)
 
-    fasta_resp = requests.get(fasta_href, timeout=30)
-    fasta_resp.raise_for_status()
+    fasta_resp = _get_with_retry(fasta_href, timeout=30)
     return lot_number, fasta_resp.text
 
 

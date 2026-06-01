@@ -7,7 +7,6 @@ and to write / validate FASTA files in UniProt format.
 
 import logging
 import os
-import sys
 import time
 from typing import List, Optional
 
@@ -19,6 +18,7 @@ WEBSITE_API = "https://rest.uniprot.org/"
 PROTEINS_API = "https://www.ebi.ac.uk/proteins/api"
 
 _FIELDS = "accession,sequence,protein_name,gene_names,organism_name,organism_id,reviewed,id"
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 
 # ---------------------------------------------------------------------------
@@ -26,13 +26,28 @@ _FIELDS = "accession,sequence,protein_name,gene_names,organism_name,organism_id,
 # ---------------------------------------------------------------------------
 
 
-def _get_url(url: str, **kwargs) -> requests.Response:
-    response = requests.get(url, **kwargs)
-    if not response.ok:
-        logger.error("Request failed: %s", response.text)
-        response.raise_for_status()
-        sys.exit()
-    return response
+def _get_url(url: str, retries: int = 3, **kwargs) -> requests.Response:
+    delay = 1.0
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, **kwargs)
+            if response.ok:
+                return response
+            if response.status_code in _RETRY_STATUSES and attempt < retries - 1:
+                logger.warning("HTTP %d on attempt %d, retrying in %.1fs", response.status_code, attempt + 1, delay)
+                time.sleep(delay)
+                delay *= 2
+                continue
+            logger.error("Request failed: %s", response.text)
+            response.raise_for_status()
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            if attempt < retries - 1:
+                logger.warning("Request error on attempt %d, retrying in %.1fs: %s", attempt + 1, delay, exc)
+                time.sleep(delay)
+                delay *= 2
+            else:
+                raise
+    raise RuntimeError(f"Failed to GET {url} after {retries} attempts")
 
 
 def _build_fasta_header(entry: dict) -> str:
