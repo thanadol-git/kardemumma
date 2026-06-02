@@ -822,6 +822,61 @@ def plot_pool_boxplot(
     plt.show()
 
 
+def plot_pool_pca(
+    pool_df: pd.DataFrame,
+    col_ratio: str = "RatioLightToHeavy",
+    col_plate: str = "characteristics[plate]",
+) -> None:
+    """
+    PCA scatter plot of pool replicates, colored by Plate.
+
+    Replicates are projected onto the first two principal components computed
+    from log-transformed peptide ratios. Each point is one replicate.
+
+    Args:
+        pool_df: DataFrame with ``Replicate``, ``Peptide Sequence``, *col_ratio*, and *col_plate* columns.
+        col_ratio: Column for the light-to-heavy ratio.
+        col_plate: Column for plate labels.
+    """
+    required = ["Replicate", "Peptide Sequence", col_ratio, col_plate]
+    missing = [c for c in required if c not in pool_df.columns]
+    if missing:
+        raise KeyError(f"pool_df missing columns {missing}. Found: {list(pool_df.columns)}")
+
+    pivot = pool_df.pivot_table(
+        index="Replicate", columns="Peptide Sequence", values=col_ratio, aggfunc="mean"
+    )
+    log_pivot = np.log(pivot.clip(lower=1e-12)).dropna(axis=1).dropna(axis=0)
+
+    if log_pivot.shape[0] < 2:
+        raise ValueError("Not enough replicates for PCA after dropping missing values.")
+
+    X = log_pivot.values
+    X = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-12)
+
+    U, S, _ = np.linalg.svd(X, full_matrices=False)
+    coords = U * S
+    var_explained = S ** 2 / np.sum(S ** 2) * 100
+
+    rep_plate = (
+        pool_df[["Replicate", col_plate]]
+        .drop_duplicates()
+        .set_index("Replicate")[col_plate]
+    )
+    plot_df = pd.DataFrame({"PC1": coords[:, 0], "PC2": coords[:, 1]}, index=log_pivot.index)
+    plot_df[col_plate] = rep_plate.reindex(log_pivot.index).values
+
+    plt.figure(figsize=(8, 6))
+    for plate, grp in plot_df.groupby(col_plate):
+        plt.scatter(grp["PC1"], grp["PC2"], label=plate, s=60, alpha=0.8)
+    plt.xlabel(f"PC1 ({var_explained[0]:.1f}%)")
+    plt.ylabel(f"PC2 ({var_explained[1]:.1f}%)")
+    plt.title(f"PCA of pool replicates (colored by {col_plate})")
+    plt.legend(title=col_plate, bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_pool_heatmap(pool_data: pd.DataFrame, aggfunc: str = "mean") -> None:
     """
     Heatmap of log(RatioLightToHeavy) for Pool samples.
