@@ -821,7 +821,6 @@ def plot_pool_boxplot(
     plt.tight_layout()
     plt.show()
 
-
 def plot_pool_pca(
     pool_df: pd.DataFrame,
     col_ratio: str = "RatioLightToHeavy",
@@ -832,6 +831,7 @@ def plot_pool_pca(
 
     Replicates are projected onto the first two principal components computed
     from log-transformed peptide ratios. Each point is one replicate.
+    Also returns PCA loadings for PC1 and PC2 (peptide contributions).
 
     Args:
         pool_df: DataFrame with ``Replicate``, ``Peptide Sequence``, *col_ratio*, and *col_plate* columns.
@@ -854,10 +854,19 @@ def plot_pool_pca(
     X = log_pivot.values
     X = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-12)
 
-    U, S, _ = np.linalg.svd(X, full_matrices=False)
+    # SVD: X = U S Vh
+    U, S, Vh = np.linalg.svd(X, full_matrices=False)
     coords = U * S
     var_explained = S ** 2 / np.sum(S ** 2) * 100
 
+    # Principal component loadings (columns: peptides, rows: PC)
+    # The loading for peptide j on PC k is Vh[k, j]
+    peptides = log_pivot.columns
+    pc1_loadings = pd.Series(Vh[0, :], index=peptides, name="PC1_loading")
+    pc2_loadings = pd.Series(Vh[1, :], index=peptides, name="PC2_loading")
+    loadings_df = pd.DataFrame({"PC1_loading": pc1_loadings, "PC2_loading": pc2_loadings})
+
+    # Plot PCA scores (replicates colored by plate)
     rep_plate = (
         pool_df[["Replicate", col_plate]]
         .drop_duplicates()
@@ -875,6 +884,45 @@ def plot_pool_pca(
     plt.legend(title=col_plate, bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
     plt.show()
+
+    # Improved: Lollipop plots for loadings with clearer label handling,
+    # Sorted by absolute loading and with sign-preserving color.
+    top_n = 12
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+    for i, (pc, pos_label, color) in enumerate(
+        zip(
+            ["PC1_loading", "PC2_loading"],
+            ["PC1", "PC2"],
+            ["#377eb8", "#e41a1c"]
+        )
+    ):
+        load = loadings_df[pc]
+        load_abs = load.abs().sort_values(ascending=False).head(top_n)
+        load_top = load.loc[load_abs.index]  # Keep sign
+        
+        ax = axes[i]
+        ax.hlines(
+            y=range(top_n), xmin=0, xmax=load_top.values,
+            color=color, alpha=0.6, linewidth=2
+        )
+        ax.plot(
+            load_top.values, range(top_n),
+            "o", color=color, markersize=8
+        )
+        # Set peptide sequence as y-tick label, sorted by abs loading
+        ax.set_yticks(range(top_n))
+        ax.set_yticklabels(load_top.index)
+        ax.set_xlabel(f"{pos_label} Loading Value")
+        ax.set_title(f"Top {top_n} peptides for {pos_label}")
+        ax.axvline(0, color="grey", linestyle="--", lw=1)
+        # Optionally color negative/positive on the plot (strip? ticks?)
+
+    plt.suptitle("Top peptide loadings for first two PCs")
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
+
+    # If users want loadings, return as well (comment/uncomment as needed)
+    # return loadings_df
 
 
 def plot_pool_heatmap(pool_data: pd.DataFrame, aggfunc: str = "mean") -> None:
