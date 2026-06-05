@@ -35,6 +35,7 @@ dependencies:
     - pyteomics
     # - msproteomicstools
     - nbstripout
+    - pytest
 
 
 # https://gist.github.com/33eyes/431e3d432f73371509d176d0dfb95b6e

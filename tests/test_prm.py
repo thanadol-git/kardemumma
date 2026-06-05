@@ -7,9 +7,9 @@ Run with:  pytest tests/test_prm.py -v
 import math
 
 import pandas as pd
-import pytestimage.png
+import pytest
 
-from skyline_qc.prm import (
+from kardemumma.prm import (
     compute_cv,
     dot_product_summary,
     flag_missing_values,
