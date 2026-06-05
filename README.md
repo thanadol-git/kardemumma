@@ -76,13 +76,57 @@ The project should be located at the `hot storage` of the lab. One can find the 
 
 
 ## To Dos
-0. Remove 3 under-QC samples from analysis 
-1. Check with Yasset on how to set up targeted SDRF.
-2. Publish python package asap
-3. Develop snakemake pipeline 
-4. Combine with OpenMS.
-5. Work a bit with SRM.
-6. Integrate prm-slider to work with the transition levels
+
+### Phase 1 — Python Package & PyPI Release
+
+**1. Code & API clean-up**
+- [ ] 0. Remove 3 under-QC samples from analysis
+- [ ] 1. Check with Yasset on how to set up targeted SDRF
+- [ ] 2. Integrate `prm-slider` to work with transition levels
+- [ ] 3. Work on SRM support (`sdrf.py` + new `srm.py` module)
+- [ ] 4. Combine output layer with OpenMS formats
+- [ ] 5. Audit all public functions — consistent naming, type hints, docstrings
+- [ ] 6. Ensure `__init__.py` exports a clean, stable public API
+
+**2. Package metadata & build**
+- [ ] 7. Update `pyproject.toml` (or `setup.cfg`): version, description, classifiers, `python_requires`, `install_requires`
+- [ ] 8. Add `CHANGELOG.md` with initial release notes
+- [ ] 9. Add `LICENSE` file if missing
+- [ ] 10. Verify `pip install -e .` builds cleanly in a fresh environment
+- [ ] 11. Build distribution: `python -m build` → inspect `dist/`
+
+**3. Testing & CI**
+- [ ] 12. Add unit tests with `pytest` for core modules (`prm.py`, `openswath.py`, `sdrf.py`, etc.)
+- [ ] 13. Add a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs tests on push/PR
+- [ ] 14. Add a release workflow that publishes to PyPI on version tag push
+
+**4. PyPI release**
+- [ ] 15. Register package name on [PyPI](https://pypi.org) (check availability of `kardemumma`)
+- [ ] 16. Create API token on PyPI and store as `PYPI_API_TOKEN` GitHub secret
+- [ ] 17. Publish first release: `python -m twine upload dist/*` (or via GitHub Actions)
+- [ ] 18. Verify: `pip install kardemumma` works from PyPI
+
+---
+
+### Phase 2 — Nextflow Pipeline
+
+**5. Pipeline design**
+- [ ] 19. Define end-to-end workflow: raw input → SDRF validation → OpenSWATH/Skyline export → PRM QC → ratio/DA output
+- [ ] 20. Sketch module boundaries as Nextflow `process` blocks (one process per major step)
+- [ ] 21. Decide on container strategy: Docker images (or Singularity) per process, each with `kardemumma` installed from PyPI
+
+**6. Implementation**
+- [ ] 22. Scaffold repository structure: `nextflow/`, `modules/`, `conf/`, `assets/`
+- [ ] 23. Write a `main.nf` entry workflow with configurable params (`--input`, `--outdir`, `--mode prm|srm`)
+- [ ] 24. Implement individual processes wrapping `kardemumma` CLI calls or Python scripts
+- [ ] 25. Add `nextflow.config` with profiles: `standard` (local), `cluster` (SLURM/HPC at SciLifeLab), `cloud`
+- [ ] 26. Pin `kardemumma` version in each container/environment to match tested PyPI release
+
+**7. Testing & docs**
+- [ ] 27. Add small test dataset (synthetic or anonymised) to `tests/` for end-to-end pipeline testing
+- [ ] 28. Add `nf-test` or a simple CI job that runs the pipeline on the test dataset
+- [ ] 29. Write pipeline usage docs in `docs/pipeline.md` (input format, params, outputs)
+- [ ] 30. Consider submission to [nf-core](https://nf-co.re) once pipeline is stable
 
 
 ## Issues
