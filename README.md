@@ -80,6 +80,7 @@ The project should be located at the `hot storage` of the lab. One can find the 
 ### Phase 1 — Python Package & PyPI Release
 
 **1. Code & API clean-up**
+- [ ] -1. Move function from DA4K to kardemumma
 - [ ] 0. Remove 3 under-QC samples from analysis
 - [ ] 1. Check with Yasset on how to set up targeted SDRF
 - [ ] 2. Integrate `prm-slider` to work with transition levels
