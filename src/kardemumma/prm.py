@@ -396,7 +396,6 @@ def plate_peptide_anova(
 
     return model, anova_res
 
-
 def get_plate_conversion_factors(
     df: pd.DataFrame,
     col_plate: str = "Plate",
@@ -437,6 +436,96 @@ def get_plate_conversion_factors(
     # Print the conversion factors
     print(f"Conversion factors: {conversion_factors}")
     return platemed, conversion_factors, model
+
+
+def detect_batch_effect(
+    df: pd.DataFrame,
+    col_plate: str = "Plate",
+    ratio_col: str = "RatioLightToHeavy",
+    log_transform: bool = False,
+    alpha: float = 0.05,
+    verbose: bool = True,
+) -> dict:
+    """
+    Test for batch (plate) effect using ANOVA on peptide ratios across plates.
+
+    Returns:
+        {
+            "batch_effect": bool,
+            "p_value": float,
+            "significance_level": float,
+            "ols_model": statsmodels OLS fit,
+            "anova_result": DataFrame,
+            "message": str
+        }
+    """
+    import pandas as pd
+    import numpy as np
+
+    try:
+        import statsmodels.formula.api as smf
+        from statsmodels.stats.anova import anova_lm
+    except ImportError:
+        raise ImportError(
+            "statsmodels is required for detect_plate_batch_effect"
+        )
+
+    cols = ["Peptide Sequence", "Replicate", col_plate, ratio_col]
+    missing_cols = [c for c in cols if c not in df.columns]
+    if missing_cols:
+        raise KeyError(f"Missing required columns: {missing_cols}")
+
+    d = df[cols].drop_duplicates().copy()
+    d["ratio_fit"] = pd.to_numeric(d[ratio_col], errors="coerce")
+
+    if log_transform:
+        d = d[d["ratio_fit"] > 0].copy()
+        d["ratio_fit"] = np.log(d["ratio_fit"])
+
+    if d.empty or d["ratio_fit"].isna().all():
+        raise ValueError("No valid ratio values to test for batch effect.")
+
+    # Fit a model with plate and peptide sequence as factors
+    model = smf.ols(
+        f'ratio_fit ~ C(Q("{col_plate}")) + C(Q("Peptide Sequence"))', data=d
+    ).fit()
+    anova_res = anova_lm(model, typ=2)
+
+    # Find the p-value for the plate effect
+    plate_row = [idx for idx in anova_res.index if str(idx).lower() == str(col_plate).lower()]
+    p_col = next((c for c in anova_res.columns if c.upper().startswith("P")), None)
+    if plate_row and p_col:
+        p_value = float(anova_res.loc[plate_row[0], p_col])
+    else:
+        # Try to find as substring (like 'C(Plate)')
+        match_rows = [idx for idx in anova_res.index if col_plate.lower() in str(idx).lower()]
+        p_value = float(anova_res.loc[match_rows[0], p_col]) if (match_rows and p_col) else np.nan
+
+    has_batch_effect = not np.isnan(p_value) and p_value < alpha
+
+    message = ""
+    if np.isnan(p_value):
+        message = "Could not extract batch (plate) effect p-value."
+    elif has_batch_effect:
+        message = (
+            f"Plate/batch effect detected: p={p_value:.3g} < alpha={alpha} "
+            "(batch correction recommended)."
+        )
+    else:
+        message = (
+            f"No significant plate/batch effect detected: p={p_value:.3g} >= alpha={alpha}."
+        )
+    if verbose:
+        print(message)
+
+    return {
+        "batch_effect": has_batch_effect,
+        "p_value": p_value,
+        "significance_level": alpha,
+        "ols_model": model,
+        "anova_result": anova_res,
+        "message": message,
+    }
 
 
 def plot_plate_conversion_factors(
@@ -887,8 +976,8 @@ def plot_pool_pca(
 
     # Improved: Lollipop plots for loadings with clearer label handling,
     # Sorted by absolute loading and with sign-preserving color.
-    top_n = 12
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+    top_n = min(12, len(loadings_df))
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     for i, (pc, pos_label, color) in enumerate(
         zip(
             ["PC1_loading", "PC2_loading"],

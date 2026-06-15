@@ -37,6 +37,7 @@ from .prm import (
     # Plate Normalization
     plate_peptide_anova,
     get_plate_conversion_factors,
+    detect_batch_effect,
     plot_plate_conversion_factors,
     adjust_ratio_by_plate,
     get_absolute_conc,
@@ -117,6 +118,7 @@ __all__ = [
     # PRM — plate normalisation
     "plate_peptide_anova",
     "get_plate_conversion_factors",
+    "detect_batch_effect",
     "plot_plate_conversion_factors",
     "adjust_ratio_by_plate",
     "get_absolute_conc",
