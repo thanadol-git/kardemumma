@@ -1285,6 +1285,7 @@ def plot_peptide_concentration_by_group(
     sdrf_data_file: pd.DataFrame,
     protein_name: str,
     group_col: Optional[str] = None,
+    color_col: Optional[str] = None,
 ) -> None:
     """
     Boxplot of absolute peptide concentration by group, one subplot per peptide.
@@ -1293,11 +1294,15 @@ def plot_peptide_concentration_by_group(
         abs_df: Wide output from get_absolute_conc (MultiIndex + replicate columns).
         sdrf_data_file: SDRF table with 'source name' and group_col.
         protein_name: Filter to this 'Protein Name' value.
-        group_col: SDRF column to group/color by. Defaults to the last 'factor value[...]' column.
+        group_col: SDRF column to group x-axis by. Defaults to the last 'factor value[...]' column.
+        color_col: SDRF column to color boxes by. Defaults to group_col.
     """
     group_col = _resolve_group_col(sdrf_data_file, group_col)
+    color_col = color_col if color_col is not None else group_col
     if group_col not in sdrf_data_file.columns:
         raise KeyError(f"Column '{group_col}' not found in sdrf_data_file.")
+    if color_col not in sdrf_data_file.columns:
+        raise KeyError(f"Column '{color_col}' not found in sdrf_data_file.")
     if "source name" not in sdrf_data_file.columns:
         raise KeyError("Column 'source name' not found in sdrf_data_file.")
 
@@ -1316,8 +1321,9 @@ def plot_peptide_concentration_by_group(
     if unmapped:
         print(f"  Unmapped replicates ({len(unmapped)}): {sorted(unmapped)}")
 
+    merge_cols = list(dict.fromkeys(["source name", group_col, color_col]))
     plot_df = long_df.merge(
-        sdrf_data_file[["source name", group_col]].drop_duplicates(),
+        sdrf_data_file[merge_cols].drop_duplicates(),
         left_on="Replicate", right_on="source name", how="left",
     )
     protein_df = plot_df[plot_df["Protein Name"] == protein_name].copy()
@@ -1331,8 +1337,8 @@ def plot_peptide_concentration_by_group(
         print(f"No peptide data found for Protein Name: '{protein_name}'")
         return
 
-    groups_all = protein_df[group_col].dropna().unique()
-    group2color = dict(zip(groups_all, sns.color_palette(n_colors=len(groups_all))))
+    color_groups_all = protein_df[color_col].dropna().unique()
+    group2color = dict(zip(color_groups_all, sns.color_palette(n_colors=len(color_groups_all))))
 
     _fig, axes = plt.subplots(len(peptides), 1, figsize=(10, 3 * len(peptides)), sharex=True)
     if len(peptides) == 1:
@@ -1343,7 +1349,8 @@ def plot_peptide_concentration_by_group(
         group_order = sorted(pep_df[group_col].dropna().unique(), key=str)
         sns.boxplot(
             data=pep_df, x=group_col, y="Protein conc [pmol]",
-            ax=ax, order=group_order, palette=group2color,
+            hue=color_col, ax=ax, order=group_order, palette=group2color,
+            dodge=(color_col != group_col),
         )
         for idx, group in enumerate(group_order):
             group_data = pep_df[pep_df[group_col] == group]["Protein conc [pmol]"]
@@ -1356,7 +1363,7 @@ def plot_peptide_concentration_by_group(
         ax.set_ylabel("Protein conc [pmol]")
         ax.set_xlabel(group_col if ax == axes[-1] else "")
         ax.tick_params(axis='x', rotation=30)
-        if ax.get_legend() is not None:
+        if color_col == group_col and ax.get_legend() is not None:
             ax.legend_.remove()
 
     plt.tight_layout(rect=[0, 0, 1, 0.98])
@@ -1495,6 +1502,7 @@ def plot_all_peptide_concentration_by_group(
     abs_df: pd.DataFrame,
     sdrf_data_file: pd.DataFrame,
     group_col: Optional[str] = None,
+    color_col: Optional[str] = None,
     pdf_path: str = "peptide_concentration_by_group.pdf",
     verbose: bool = False,
 ) -> str:
@@ -1505,6 +1513,7 @@ def plot_all_peptide_concentration_by_group(
         abs_df: Wide output from get_absolute_conc.
         sdrf_data_file: SDRF metadata table.
         group_col: Column to group samples by. Defaults to the last 'factor value[...]' column.
+        color_col: Column to color boxes by. Defaults to group_col.
         pdf_path: Output PDF path.
         verbose: Print protein names as they are plotted.
 
@@ -1531,7 +1540,7 @@ def plot_all_peptide_concentration_by_group(
                     try:
                         plt.figure(figsize=(A4_WIDTH, A4_HEIGHT))
                         plot_peptide_concentration_by_group(
-                            abs_df, sdrf_data_file, group_col=group_col, protein_name=pname,
+                            abs_df, sdrf_data_file, group_col=group_col, color_col=color_col, protein_name=pname,
                         )
                         fig = plt.gcf()
                         pdf.savefig(fig)
