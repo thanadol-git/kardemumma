@@ -39,7 +39,6 @@ You can install the dependencies and set up the environment using [Conda](https:
    ```bash
    pip install -e .
    ```
-   ```
 
 ## Available pipelines
 - [ ] `SDRF generation for plasma proteomics`
@@ -80,7 +79,7 @@ The project should be located at the `hot storage` of the lab. One can find the 
 ### Phase 1 — Python Package & PyPI Release
 
 **1. Code & API clean-up**
-- [ ] -1. Move function from DA4K to kardemumma
+- [x] -1. Move plot functions from DA4K notebook to `prm.py` and expose via `kdm.*` (`map_peptide_sequence`, `plot_peptide_concentration_by_group`, `plot_median_peptide_concentration_by_group`, `plot_all_median_peptide_concentration_by_group`, `plot_all_peptide_concentration_by_group`)
 - [ ] 0. Remove 3 under-QC samples from analysis
 - [ ] 1. Check with Yasset on how to set up targeted SDRF
 - [ ] 2. Integrate `prm-slider` to work with transition levels
@@ -90,7 +89,7 @@ The project should be located at the `hot storage` of the lab. One can find the 
 - [ ] 6. Ensure `__init__.py` exports a clean, stable public API
 
 **2. Package metadata & build**
-- [ ] 7. Update `pyproject.toml` (or `setup.cfg`): version, description, classifiers, `python_requires`, `install_requires`
+- [ ] 7. Update `pyproject.toml`: add missing `pyteomics` dependency, bump version, add classifiers (`python_requires`, `install_requires`)
 - [ ] 8. Add `CHANGELOG.md` with initial release notes
 - [ ] 9. Add `LICENSE` file if missing
 - [ ] 10. Verify `pip install -e .` builds cleanly in a fresh environment
