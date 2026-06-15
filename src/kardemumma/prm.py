@@ -1326,7 +1326,9 @@ def plot_peptide_concentration_by_group(
         sdrf_data_file[merge_cols].drop_duplicates(),
         left_on="Replicate", right_on="source name", how="left",
     )
-    protein_df = plot_df[plot_df["Protein Name"] == protein_name].copy()
+    protein_df = plot_df[
+        (plot_df["Protein Name"] == protein_name) & plot_df[color_col].notna()
+    ].copy()
     if protein_df.empty:
         print(f"No data found for Protein Name: '{protein_name}'")
         print("Available Protein Names:", plot_df["Protein Name"].unique())
@@ -1337,35 +1339,82 @@ def plot_peptide_concentration_by_group(
         print(f"No peptide data found for Protein Name: '{protein_name}'")
         return
 
+    _DISEASE_CATEGORY_PALETTE = {
+        
+        "Healthy": "#C9B28F",
+        "Cardiovascular": "#F28C5B",
+        "Metabolic": "#D9B77E",
+        "Cancer": "#97A7D3",
+        "Psychiatric": "#67C2A3",
+        "Neurologic": "#64C0A8",
+        "Autoimmune": "#D989C3",
+        "Infection": "#F2D02C",
+        
+    }
     color_groups_all = protein_df[color_col].dropna().unique()
-    group2color = dict(zip(color_groups_all, sns.color_palette(n_colors=len(color_groups_all))))
+    if color_col == "characteristics[disease category]":
+        group2color = {g: _DISEASE_CATEGORY_PALETTE.get(g, "#cccccc") for g in color_groups_all}
+    else:
+        group2color = dict(zip(color_groups_all, sns.color_palette(n_colors=len(color_groups_all))))
 
-    _fig, axes = plt.subplots(len(peptides), 1, figsize=(10, 3 * len(peptides)), sharex=True)
+    fig, axes = plt.subplots(len(peptides), 1, figsize=(10, 3 * len(peptides)), sharex=True)
     if len(peptides) == 1:
         axes = [axes]
 
     for ax, pep in zip(axes, peptides):
         pep_df = protein_df[protein_df["Peptide Sequence"] == pep]
-        group_order = sorted(pep_df[group_col].dropna().unique(), key=str)
+        group_to_color_label = (
+            pep_df.drop_duplicates(subset=[group_col])
+            .set_index(group_col)[color_col]
+        )
+        if color_col == "characteristics[disease category]":
+            cat_order = list(_DISEASE_CATEGORY_PALETTE.keys())
+            cat_rank = {c: i for i, c in enumerate(cat_order)}
+            group_order = sorted(
+                pep_df[group_col].dropna().unique(),
+                key=lambda g: (
+                    cat_rank.get(group_to_color_label.get(g, ""), len(cat_order)),
+                    str(g),
+                ),
+            )
+        else:
+            group_order = sorted(
+                pep_df[group_col].dropna().unique(),
+                key=lambda g: (str(group_to_color_label.get(g, "")), str(g)),
+            )
         sns.boxplot(
             data=pep_df, x=group_col, y="Protein conc [pmol]",
             hue=color_col, ax=ax, order=group_order, palette=group2color,
-            dodge=(color_col != group_col),
+            dodge=False,
         )
-        for idx, group in enumerate(group_order):
-            group_data = pep_df[pep_df[group_col] == group]["Protein conc [pmol]"]
-            if not group_data.empty:
-                mean_val = group_data.mean()
-                ax.text(idx, mean_val, f"{mean_val:.2f}",
-                        ha='center', va='center', fontsize=9, fontweight="bold", color='black',
-                        bbox=dict(facecolor='white', edgecolor='none', pad=0.3, alpha=0.7))
-        ax.set_title(f"{pep}|{protein_name}", fontsize=10, loc='left')
-        ax.set_ylabel("Protein conc [pmol]")
-        ax.set_xlabel(group_col if ax == axes[-1] else "")
-        ax.tick_params(axis='x', rotation=30)
-        if color_col == group_col and ax.get_legend() is not None:
+        # for idx, group in enumerate(group_order):
+        #     group_data = pep_df[pep_df[group_col] == group]["Protein conc [pmol]"]
+        #     if not group_data.empty:
+        #         mean_val = group_data.mean()
+        #         ax.text(idx, mean_val, f"{mean_val:.2f}",
+        #                 ha='center', va='center', fontsize=9, fontweight="bold", color='black',
+        #                 bbox=dict(facecolor='white', edgecolor='none', pad=0.3, alpha=0.7))
+        ax.set_title(f"{pep}|{protein_name}", fontsize=5, loc='left')
+        ax.set_ylabel("Protein conc [pmol]", fontsize=5)
+        ax.set_xlabel(group_col if ax == axes[-1] else "", fontsize=5)
+        ax.tick_params(axis='x', rotation=90, labelsize=5)
+        ax.tick_params(axis='y', labelsize=5)
+        if ax.get_legend() is not None:
             ax.legend_.remove()
 
+    handles, labels = axes[0].get_legend_handles_labels()
+    if color_col == "characteristics[disease category]":
+        cat_rank = {c: i for i, c in enumerate(_DISEASE_CATEGORY_PALETTE.keys())}
+        paired = sorted(
+            zip(labels, handles),
+            key=lambda x: cat_rank.get(x[0], len(_DISEASE_CATEGORY_PALETTE)),
+        )
+        labels, handles = zip(*paired) if paired else (labels, handles)
+    fig.legend(
+        handles, labels,
+        loc="center right", bbox_to_anchor=(1.15, 0.5),
+        fontsize=5, title=color_col, title_fontsize=5,
+    )
     plt.tight_layout(rect=[0, 0, 1, 0.98])
     plt.show()
 
