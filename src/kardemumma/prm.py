@@ -1341,14 +1341,14 @@ def plot_peptide_concentration_by_group(
 
     _DISEASE_CATEGORY_PALETTE = {
         
-        "Healthy": "#C9B28F",
-        "Cardiovascular": "#F28C5B",
-        "Metabolic": "#D9B77E",
-        "Cancer": "#97A7D3",
-        "Psychiatric": "#67C2A3",
-        "Neurologic": "#64C0A8",
-        "Autoimmune": "#D989C3",
-        "Infection": "#F2D02C",
+        "Healthy": "#c9b28fffd",
+        "Cardiovascular": "#ed936bff",
+        "Metabolic": "#e0c59affd",
+        "Cancer": "#919fc7ffd",
+        "Psychiatric": "#7dc0a6ff",
+        "Neurologic": "#7dc0a6ff",
+        "Autoimmune": "#da8ec0ff",
+        "Infection": "#f9da56ff",
         
     }
     color_groups_all = protein_df[color_col].dropna().unique()
@@ -1367,21 +1367,10 @@ def plot_peptide_concentration_by_group(
             pep_df.drop_duplicates(subset=[group_col])
             .set_index(group_col)[color_col]
         )
-        if color_col == "characteristics[disease category]":
-            cat_order = list(_DISEASE_CATEGORY_PALETTE.keys())
-            cat_rank = {c: i for i, c in enumerate(cat_order)}
-            group_order = sorted(
-                pep_df[group_col].dropna().unique(),
-                key=lambda g: (
-                    cat_rank.get(group_to_color_label.get(g, ""), len(cat_order)),
-                    str(g),
-                ),
-            )
-        else:
-            group_order = sorted(
-                pep_df[group_col].dropna().unique(),
-                key=lambda g: (str(group_to_color_label.get(g, "")), str(g)),
-            )
+        group_order = sorted(
+            pep_df[group_col].dropna().unique(),
+            key=lambda g: (str(group_to_color_label.get(g, "")), str(g)),
+        )
         sns.boxplot(
             data=pep_df, x=group_col, y="Protein conc [pmol]",
             hue=color_col, ax=ax, order=group_order, palette=group2color,
@@ -1404,11 +1393,8 @@ def plot_peptide_concentration_by_group(
 
     handles, labels = axes[0].get_legend_handles_labels()
     if color_col == "characteristics[disease category]":
-        cat_rank = {c: i for i, c in enumerate(_DISEASE_CATEGORY_PALETTE.keys())}
-        paired = sorted(
-            zip(labels, handles),
-            key=lambda x: cat_rank.get(x[0], len(_DISEASE_CATEGORY_PALETTE)),
-        )
+        order_map = {v: i for i, v in enumerate(_DISEASE_CATEGORY_ORDER)}
+        paired = sorted(zip(labels, handles), key=lambda x: order_map.get(x[0], len(_DISEASE_CATEGORY_ORDER)))
         labels, handles = zip(*paired) if paired else (labels, handles)
     fig.legend(
         handles, labels,
