@@ -89,6 +89,16 @@ def _patsy_scalar_categorical(series: pd.Series) -> pd.Series:
     return series.map(_to_python_scalar)
 
 
+def _resolve_group_col(sdrf_data_file: pd.DataFrame, group_col: Optional[str]) -> str:
+    """Return group_col if provided; otherwise use the last column starting with 'factor value'."""
+    if group_col is not None:
+        return group_col
+    factor_cols = [c for c in sdrf_data_file.columns if c.startswith("factor value")]
+    if not factor_cols:
+        raise KeyError("No column starting with 'factor value' found in sdrf_data_file.")
+    return factor_cols[-1]
+
+
 def _formula_clean_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Flatten MultiIndex columns, drop duplicates, reset index — so patsy sees a plain table."""
     out = df.copy()
@@ -1273,8 +1283,8 @@ def map_peptide_sequence(
 def plot_peptide_concentration_by_group(
     abs_df: pd.DataFrame,
     sdrf_data_file: pd.DataFrame,
-    group_col: str,
     protein_name: str,
+    group_col: Optional[str] = None,
 ) -> None:
     """
     Boxplot of absolute peptide concentration by group, one subplot per peptide.
@@ -1282,9 +1292,10 @@ def plot_peptide_concentration_by_group(
     Args:
         abs_df: Wide output from get_absolute_conc (MultiIndex + replicate columns).
         sdrf_data_file: SDRF table with 'source name' and group_col.
-        group_col: SDRF column to group/color by (e.g. 'factor value[disease]').
         protein_name: Filter to this 'Protein Name' value.
+        group_col: SDRF column to group/color by. Defaults to the last 'factor value[...]' column.
     """
+    group_col = _resolve_group_col(sdrf_data_file, group_col)
     if group_col not in sdrf_data_file.columns:
         raise KeyError(f"Column '{group_col}' not found in sdrf_data_file.")
     if "source name" not in sdrf_data_file.columns:
@@ -1355,8 +1366,8 @@ def plot_peptide_concentration_by_group(
 def plot_median_peptide_concentration_by_group(
     abs_df: pd.DataFrame,
     sdrf_data_file: pd.DataFrame,
-    group_col: str,
     protein_name: str,
+    group_col: Optional[str] = None,
 ) -> None:
     """
     Line plot of median peptide concentration ± SEM by group for each peptide of a protein.
@@ -1364,9 +1375,10 @@ def plot_median_peptide_concentration_by_group(
     Args:
         abs_df: Peptide concentration data (wide format from get_absolute_conc).
         sdrf_data_file: Sample metadata with 'source name' and group_col.
-        group_col: Metadata column to group samples by (e.g. 'factor value[disease]').
         protein_name: Protein Name value to filter on.
+        group_col: Metadata column to group samples by. Defaults to the last 'factor value[...]' column.
     """
+    group_col = _resolve_group_col(sdrf_data_file, group_col)
     if group_col not in sdrf_data_file.columns:
         raise KeyError(f"Column '{group_col}' not found in sdrf_data_file.")
     if "source name" not in sdrf_data_file.columns:
@@ -1436,7 +1448,7 @@ def plot_median_peptide_concentration_by_group(
 def plot_all_median_peptide_concentration_by_group(
     abs_df: pd.DataFrame,
     sdrf_data_file: pd.DataFrame,
-    group_col: str = "factor value[disease]",
+    group_col: Optional[str] = None,
     pdf_path: str = "median_peptide_concentration_by_group.pdf",
     verbose: bool = False,
 ) -> None:
@@ -1446,13 +1458,14 @@ def plot_all_median_peptide_concentration_by_group(
     Args:
         abs_df: Wide output from get_absolute_conc.
         sdrf_data_file: SDRF metadata table.
-        group_col: Column to group samples by.
+        group_col: Column to group samples by. Defaults to the last 'factor value[...]' column.
         pdf_path: Output PDF path.
         verbose: Print protein names as they are plotted.
     """
     from matplotlib.backends.backend_pdf import PdfPages
     import warnings
 
+    group_col = _resolve_group_col(sdrf_data_file, group_col)
     A4_WIDTH, A4_HEIGHT = 11.69, 8.27
     original_show = plt.show
     plt.show = lambda *a, **kw: None
@@ -1481,7 +1494,7 @@ def plot_all_median_peptide_concentration_by_group(
 def plot_all_peptide_concentration_by_group(
     abs_df: pd.DataFrame,
     sdrf_data_file: pd.DataFrame,
-    group_col: str = "factor value[disease]",
+    group_col: Optional[str] = None,
     pdf_path: str = "peptide_concentration_by_group.pdf",
     verbose: bool = False,
 ) -> str:
@@ -1491,7 +1504,7 @@ def plot_all_peptide_concentration_by_group(
     Args:
         abs_df: Wide output from get_absolute_conc.
         sdrf_data_file: SDRF metadata table.
-        group_col: Column to group samples by.
+        group_col: Column to group samples by. Defaults to the last 'factor value[...]' column.
         pdf_path: Output PDF path.
         verbose: Print protein names as they are plotted.
 
@@ -1501,6 +1514,7 @@ def plot_all_peptide_concentration_by_group(
     from matplotlib.backends.backend_pdf import PdfPages
     import warnings
 
+    group_col = _resolve_group_col(sdrf_data_file, group_col)
     A4_WIDTH, A4_HEIGHT = 8.27, 11.69
     original_show = plt.show
     plt.show = lambda *a, **kw: None
