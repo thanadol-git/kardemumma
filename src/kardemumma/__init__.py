@@ -61,9 +61,11 @@ from .prm import (
     # Absolute Concentration Plots
     map_peptide_sequence,
     plot_peptide_concentration_by_group,
+    plot_peptide_all,
     plot_median_peptide_concentration_by_group,
     plot_all_median_peptide_concentration_by_group,
     plot_all_peptide_concentration_by_group,
+    plot_all_all,
 )
 from .openswath import (
     import_openswath_file,
@@ -148,9 +150,11 @@ __all__ = [
     # PRM — absolute concentration plots
     "map_peptide_sequence",
     "plot_peptide_concentration_by_group",
+    "plot_peptide_all",
     "plot_median_peptide_concentration_by_group",
     "plot_all_median_peptide_concentration_by_group",
     "plot_all_peptide_concentration_by_group",
+    "plot_all_all",
     # OpenSWATH
     "import_openswath_file",
     "filter_best_peak_group",
