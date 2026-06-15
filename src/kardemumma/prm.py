@@ -1142,3 +1142,393 @@ def plot_logratio_by_plate_boxplot(df: pd.DataFrame) -> None:
     plt.legend(title="Plate", bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
     plt.show()
+
+
+# ---------------------------------------------------------------------------
+# Absolute Concentration Plots
+# ---------------------------------------------------------------------------
+
+
+def map_peptide_sequence(
+    abs_df: pd.DataFrame,
+    fasta_file: pd.DataFrame,
+    protein_name: str,
+    line_length: int = 30,
+):
+    """
+    Plot a protein sequence in blocks, highlighting detected peptide locations.
+
+    Args:
+        abs_df: Peptide concentration data (wide or long format from get_absolute_conc).
+        fasta_file: Fasta/sequence dataframe (output of fetch_fasta).
+        protein_name: Protein name matching abs_df['Protein Name'].
+        line_length: Amino acids per row.
+
+    Returns:
+        matplotlib.figure.Figure
+    """
+    if isinstance(abs_df.columns, pd.MultiIndex):
+        abs_df_flat = abs_df.copy()
+        abs_df_flat.columns = [
+            '|'.join([str(x) for x in col if x != '' and x is not None])
+            for col in abs_df_flat.columns.values
+        ]
+    else:
+        abs_df_flat = abs_df
+
+    def _get_col(df, colname):
+        if colname in df.columns:
+            return df[colname]
+        elif df.index.names and colname in df.index.names:
+            return df.index.get_level_values(colname)
+        raise KeyError(f"'{colname}' not found in DataFrame columns or index.")
+
+    try:
+        protein_mask = _get_col(abs_df_flat, 'Protein Name') == protein_name
+        if not protein_mask.any():
+            raise ValueError(f"No rows found for Protein Name '{protein_name}'.")
+        peptides = _get_col(abs_df_flat, 'Peptide Sequence')[protein_mask].unique()
+    except Exception as e:
+        raise RuntimeError(f"Could not extract peptide sequences for '{protein_name}': {e}")
+
+    matching = fasta_file[fasta_file['id'] == protein_name]
+    if matching.empty:
+        stripped = protein_name.split('|')[0]
+        matching = fasta_file[fasta_file['id'].str.startswith(stripped)]
+        if matching.empty:
+            raise ValueError(f"Could not find fasta row for '{protein_name}'.")
+    sequence = matching.iloc[0]['sequence']
+    seq_len = len(sequence)
+    n_lines = int(np.ceil(seq_len / line_length))
+
+    pep_positions = np.zeros(seq_len, dtype=int)
+    pep_indices: dict = {}
+    for idx, pep in enumerate(peptides):
+        start = sequence.find(pep)
+        if start == -1:
+            print(f"Warning: peptide '{pep}' not found in sequence for '{protein_name}'.")
+            continue
+        pep_indices[pep] = idx
+        pep_positions[start:start + len(pep)] = idx + 1
+
+    fig_height = max(n_lines * 1.3 + 1.5, 2.8)
+    fig_width = min(1.3 * line_length, 28)
+    fig, axes = plt.subplots(n_lines, 1, figsize=(fig_width, fig_height), sharex=False, squeeze=False)
+    fig.suptitle(str(protein_name), fontsize=18, y=1.0, weight='bold')
+    colors = plt.cm.tab20.colors
+
+    for line in range(n_lines):
+        ax = axes[line, 0]
+        start_idx = line * line_length
+        end_idx = min((line + 1) * line_length, seq_len)
+        n_aa = end_idx - start_idx
+        seq_sub = sequence[start_idx:end_idx]
+
+        for i in range(line_length):
+            if i < n_aa:
+                in_pep = pep_positions[start_idx + i]
+                ax.add_patch(plt.Rectangle(
+                    (i, 0), 1, 1,
+                    facecolor=colors[in_pep - 1] if in_pep else '#ffffff',
+                    edgecolor='black',
+                    lw=1.5 if in_pep else 0.7,
+                    alpha=0.7 if in_pep else 1.0,
+                    zorder=2 if in_pep else 1,
+                    linewidth=1.3,
+                ))
+                ax.text(i + 0.5, 0.5, seq_sub[i], ha='center', va='center',
+                        color='black', fontsize=16, fontfamily='monospace',
+                        weight='bold', zorder=4)
+            else:
+                ax.add_patch(plt.Rectangle(
+                    (i, 0), 1, 1,
+                    facecolor='#f5f5f5', edgecolor='black',
+                    lw=0.6, alpha=1.0, zorder=1, linewidth=1.0,
+                ))
+
+        ax.set_xlim(0, line_length)
+        ax.set_ylim(0, 1.23)
+        ax.set_yticks([])
+        residue_ticks = list(range(0, line_length, 10))
+        xtick_labels = [str(start_idx + 1 + x) if x < n_aa else '' for x in residue_ticks]
+        ax.set_xticks([x + 0.5 for x in residue_ticks])
+        ax.set_xticklabels(xtick_labels, fontsize=12)
+        for spine in ['top', 'right', 'left']:
+            ax.spines[spine].set_visible(False)
+        ax.spines['bottom'].set_visible(True)
+
+    if pep_indices:
+        legend_handles = [plt.Line2D([0], [0], color=colors[idx % len(colors)], lw=8)
+                          for idx in pep_indices.values()]
+        axes[-1, 0].legend(
+            legend_handles, list(pep_indices.keys()),
+            loc='upper center',
+            bbox_to_anchor=(0.5, -0.30 + (0.3 / fig_height)),
+            ncol=3, fontsize=11, frameon=False,
+        )
+    plt.tight_layout(h_pad=0.8, rect=[0, 0, 1, 0.98])
+    return fig
+
+
+def plot_peptide_concentration_by_group(
+    abs_df: pd.DataFrame,
+    sdrf_data_file: pd.DataFrame,
+    group_col: str,
+    protein_name: str,
+) -> None:
+    """
+    Boxplot of absolute peptide concentration by group, one subplot per peptide.
+
+    Args:
+        abs_df: Wide output from get_absolute_conc (MultiIndex + replicate columns).
+        sdrf_data_file: SDRF table with 'source name' and group_col.
+        group_col: SDRF column to group/color by (e.g. 'factor value[disease]').
+        protein_name: Filter to this 'Protein Name' value.
+    """
+    if group_col not in sdrf_data_file.columns:
+        raise KeyError(f"Column '{group_col}' not found in sdrf_data_file.")
+    if "source name" not in sdrf_data_file.columns:
+        raise KeyError("Column 'source name' not found in sdrf_data_file.")
+
+    long_df = (
+        abs_df.reset_index()
+        .melt(
+            id_vars=["qRePS", "Peptide Sequence", "Protein Name"],
+            var_name="Replicate",
+            value_name="Protein conc [pmol]",
+        )
+        .dropna(subset=["Protein conc [pmol]"])
+    )
+
+    unmapped = set(long_df["Replicate"]) - set(sdrf_data_file["source name"])
+    print(f"All Replicate values mapped to 'source name': {len(unmapped) == 0}")
+    if unmapped:
+        print(f"  Unmapped replicates ({len(unmapped)}): {sorted(unmapped)}")
+
+    plot_df = long_df.merge(
+        sdrf_data_file[["source name", group_col]].drop_duplicates(),
+        left_on="Replicate", right_on="source name", how="left",
+    )
+    protein_df = plot_df[plot_df["Protein Name"] == protein_name].copy()
+    if protein_df.empty:
+        print(f"No data found for Protein Name: '{protein_name}'")
+        print("Available Protein Names:", plot_df["Protein Name"].unique())
+        return
+
+    peptides = protein_df["Peptide Sequence"].unique()
+    if len(peptides) == 0:
+        print(f"No peptide data found for Protein Name: '{protein_name}'")
+        return
+
+    groups_all = protein_df[group_col].dropna().unique()
+    group2color = dict(zip(groups_all, sns.color_palette(n_colors=len(groups_all))))
+
+    _fig, axes = plt.subplots(len(peptides), 1, figsize=(10, 3 * len(peptides)), sharex=True)
+    if len(peptides) == 1:
+        axes = [axes]
+
+    for ax, pep in zip(axes, peptides):
+        pep_df = protein_df[protein_df["Peptide Sequence"] == pep]
+        group_order = sorted(pep_df[group_col].dropna().unique(), key=str)
+        sns.boxplot(
+            data=pep_df, x=group_col, y="Protein conc [pmol]",
+            ax=ax, order=group_order, palette=group2color,
+        )
+        for idx, group in enumerate(group_order):
+            group_data = pep_df[pep_df[group_col] == group]["Protein conc [pmol]"]
+            if not group_data.empty:
+                mean_val = group_data.mean()
+                ax.text(idx, mean_val, f"{mean_val:.2f}",
+                        ha='center', va='center', fontsize=9, fontweight="bold", color='black',
+                        bbox=dict(facecolor='white', edgecolor='none', pad=0.3, alpha=0.7))
+        ax.set_title(f"{pep}|{protein_name}", fontsize=10, loc='left')
+        ax.set_ylabel("Protein conc [pmol]")
+        ax.set_xlabel(group_col if ax == axes[-1] else "")
+        ax.tick_params(axis='x', rotation=30)
+        if ax.get_legend() is not None:
+            ax.legend_.remove()
+
+    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    plt.show()
+
+
+def plot_median_peptide_concentration_by_group(
+    abs_df: pd.DataFrame,
+    sdrf_data_file: pd.DataFrame,
+    group_col: str,
+    protein_name: str,
+) -> None:
+    """
+    Line plot of median peptide concentration ± SEM by group for each peptide of a protein.
+
+    Args:
+        abs_df: Peptide concentration data (wide format from get_absolute_conc).
+        sdrf_data_file: Sample metadata with 'source name' and group_col.
+        group_col: Metadata column to group samples by (e.g. 'factor value[disease]').
+        protein_name: Protein Name value to filter on.
+    """
+    if group_col not in sdrf_data_file.columns:
+        raise KeyError(f"Column '{group_col}' not found in sdrf_data_file.")
+    if "source name" not in sdrf_data_file.columns:
+        raise KeyError("Column 'source name' not found in sdrf_data_file.")
+
+    long_df = (
+        abs_df.reset_index()
+        .melt(
+            id_vars=["qRePS", "Peptide Sequence", "Protein Name"],
+            var_name="Replicate",
+            value_name="Protein conc [pmol]",
+        )
+        .dropna(subset=["Protein conc [pmol]"])
+    )
+
+    unmapped = set(long_df["Replicate"]) - set(sdrf_data_file["source name"])
+    print(f"All Replicate values mapped to 'source name': {len(unmapped) == 0}")
+    if unmapped:
+        print(f"  Unmapped replicates ({len(unmapped)}): {sorted(unmapped)}")
+
+    plot_df = long_df.merge(
+        sdrf_data_file[["source name", group_col]].drop_duplicates(),
+        left_on="Replicate", right_on="source name", how="left",
+    )
+    protein_df = plot_df[plot_df["Protein Name"] == protein_name].copy()
+    if protein_df.empty:
+        print(f"No data found for Protein Name: '{protein_name}'")
+        print("Available Protein Names:", plot_df["Protein Name"].unique())
+        return
+
+    peptides = protein_df["Peptide Sequence"].unique()
+    if len(peptides) == 0:
+        print(f"No peptide data found for Protein Name: '{protein_name}'")
+        return
+
+    peptide_colors = dict(zip(peptides, sns.color_palette("tab10", len(peptides))))
+
+    agg_stats = (
+        protein_df
+        .groupby(["Peptide Sequence", group_col])["Protein conc [pmol]"]
+        .agg(['median', 'std', 'count'])
+        .reset_index()
+    )
+    agg_stats["sem"] = agg_stats["std"] / agg_stats["count"].pow(0.5)
+    group_order = sorted(agg_stats[group_col].dropna().unique(), key=str)
+
+    plt.figure(figsize=(12, 8))
+    for pep in peptides:
+        pep_stats = agg_stats[agg_stats["Peptide Sequence"] == pep].set_index(group_col).reindex(group_order)
+        plt.errorbar(
+            group_order,
+            pep_stats["median"].values,
+            yerr=pep_stats["sem"].values,
+            marker="o", label=pep, color=peptide_colors[pep],
+            capsize=4, linestyle='-',
+        )
+
+    plt.title(f"Median peptide concentration by group for {protein_name}")
+    plt.xlabel(group_col)
+    plt.ylabel("Median Protein/Peptide conc [pmol]")
+    plt.xticks(rotation=45, ha='right')
+    plt.legend(title="Peptide Sequence")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_all_median_peptide_concentration_by_group(
+    abs_df: pd.DataFrame,
+    sdrf_data_file: pd.DataFrame,
+    group_col: str = "factor value[disease]",
+    pdf_path: str = "median_peptide_concentration_by_group.pdf",
+    verbose: bool = False,
+) -> None:
+    """
+    Save one median-concentration line plot per protein to a multi-page PDF (A4 landscape).
+
+    Args:
+        abs_df: Wide output from get_absolute_conc.
+        sdrf_data_file: SDRF metadata table.
+        group_col: Column to group samples by.
+        pdf_path: Output PDF path.
+        verbose: Print protein names as they are plotted.
+    """
+    from matplotlib.backends.backend_pdf import PdfPages
+    import warnings
+
+    A4_WIDTH, A4_HEIGHT = 11.69, 8.27
+    original_show = plt.show
+    plt.show = lambda *a, **kw: None
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FutureWarning, module="seaborn")
+            protein_names = abs_df.reset_index()["Protein Name"].unique()
+            with PdfPages(pdf_path) as pdf:
+                for pname in protein_names:
+                    if verbose:
+                        print(f"Plotting {pname}")
+                    try:
+                        plot_median_peptide_concentration_by_group(
+                            abs_df, sdrf_data_file, group_col=group_col, protein_name=pname,
+                        )
+                        fig = plt.gcf()
+                        fig.set_size_inches(A4_WIDTH, A4_HEIGHT)
+                        pdf.savefig(fig)
+                        plt.close(fig)
+                    except Exception as e:
+                        print(f"Error plotting {pname}: {e}")
+    finally:
+        plt.show = original_show
+
+
+def plot_all_peptide_concentration_by_group(
+    abs_df: pd.DataFrame,
+    sdrf_data_file: pd.DataFrame,
+    group_col: str = "factor value[disease]",
+    pdf_path: str = "peptide_concentration_by_group.pdf",
+    verbose: bool = False,
+) -> str:
+    """
+    Save one boxplot per protein to a multi-page PDF (A4 portrait).
+
+    Args:
+        abs_df: Wide output from get_absolute_conc.
+        sdrf_data_file: SDRF metadata table.
+        group_col: Column to group samples by.
+        pdf_path: Output PDF path.
+        verbose: Print protein names as they are plotted.
+
+    Returns:
+        pdf_path
+    """
+    from matplotlib.backends.backend_pdf import PdfPages
+    import warnings
+
+    A4_WIDTH, A4_HEIGHT = 8.27, 11.69
+    original_show = plt.show
+    plt.show = lambda *a, **kw: None
+    saved = 0
+    skipped = []
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FutureWarning, module="seaborn")
+            protein_names = abs_df.reset_index()["Protein Name"].unique()
+            with PdfPages(pdf_path) as pdf:
+                for pname in protein_names:
+                    if verbose:
+                        print(f"Plotting {pname}")
+                    try:
+                        plt.figure(figsize=(A4_WIDTH, A4_HEIGHT))
+                        plot_peptide_concentration_by_group(
+                            abs_df, sdrf_data_file, group_col=group_col, protein_name=pname,
+                        )
+                        fig = plt.gcf()
+                        pdf.savefig(fig)
+                        plt.close(fig)
+                        saved += 1
+                    except ValueError:
+                        skipped.append(pname)
+    finally:
+        plt.show = original_show
+
+    print(f"Saved {saved} plots to {pdf_path}")
+    if skipped:
+        print(f"Skipped {len(skipped)} protein(s) with no data.")
+    return pdf_path

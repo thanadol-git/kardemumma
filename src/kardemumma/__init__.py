@@ -58,6 +58,12 @@ from .prm import (
     plot_inter_plate_cv_kde,
     plot_cumulative_peptide_count_by_cv,
     plot_logratio_by_plate_boxplot,
+    # Absolute Concentration Plots
+    map_peptide_sequence,
+    plot_peptide_concentration_by_group,
+    plot_median_peptide_concentration_by_group,
+    plot_all_median_peptide_concentration_by_group,
+    plot_all_peptide_concentration_by_group,
 )
 from .openswath import (
     import_openswath_file,
@@ -139,6 +145,12 @@ __all__ = [
     "plot_inter_plate_cv_kde",
     "plot_cumulative_peptide_count_by_cv",
     "plot_logratio_by_plate_boxplot",
+    # PRM — absolute concentration plots
+    "map_peptide_sequence",
+    "plot_peptide_concentration_by_group",
+    "plot_median_peptide_concentration_by_group",
+    "plot_all_median_peptide_concentration_by_group",
+    "plot_all_peptide_concentration_by_group",
     # OpenSWATH
     "import_openswath_file",
     "filter_best_peak_group",
