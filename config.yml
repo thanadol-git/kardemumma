@@ -33,6 +33,7 @@ dependencies:
     - ppx
     # - ipython
     - pyteomics
+    - umap-learn
     # - msproteomicstools
     - nbstripout
     - pytest

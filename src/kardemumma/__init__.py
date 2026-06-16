@@ -66,6 +66,8 @@ from .prm import (
     plot_all_median_peptide_concentration_by_group,
     plot_all_peptide_concentration_by_group,
     plot_all_all,
+    plot_pca,
+    plot_umap,
 )
 from .openswath import (
     import_openswath_file,
@@ -155,6 +157,8 @@ __all__ = [
     "plot_all_median_peptide_concentration_by_group",
     "plot_all_peptide_concentration_by_group",
     "plot_all_all",
+    "plot_pca",
+    "plot_umap",
     # OpenSWATH
     "import_openswath_file",
     "filter_best_peak_group",

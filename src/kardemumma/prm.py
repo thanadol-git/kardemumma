@@ -1743,6 +1743,152 @@ def plot_all_peptide_concentration_by_group(
     return pdf_path
 
 
+def plot_pca(
+    abs_df: pd.DataFrame,
+    sdrf_data_file: pd.DataFrame,
+    color_col: Optional[str] = None,
+    feature_col: str = "Protein Name",
+    figsize: Tuple[int, int] = (8, 6),
+    title: str = "PCA",
+) -> None:
+    """
+    PCA scatter plot of samples colored by a metadata column.
+
+    Args:
+        abs_df: Wide output from get_absolute_conc.
+        sdrf_data_file: SDRF metadata table with 'source name' and color_col.
+        color_col: Column in sdrf_data_file to color points by. Defaults to last 'factor value[...]' column.
+        feature_col: Feature axis for the matrix ('Protein Name' or 'Peptide Sequence').
+        figsize: Figure size.
+        title: Plot title.
+    """
+    try:
+        from sklearn.decomposition import PCA
+        from sklearn.preprocessing import StandardScaler
+    except ImportError:
+        raise ImportError("scikit-learn is required: pip install scikit-learn")
+
+    color_col = _resolve_group_col(sdrf_data_file, color_col)
+    if color_col not in sdrf_data_file.columns:
+        raise KeyError(f"Column '{color_col}' not found in sdrf_data_file.")
+    if "source name" not in sdrf_data_file.columns:
+        raise KeyError("Column 'source name' not found in sdrf_data_file.")
+
+    long_df = (
+        abs_df.reset_index()
+        .melt(id_vars=["qRePS", "Peptide Sequence", "Protein Name"],
+              var_name="Replicate", value_name="Protein conc [pmol]")
+        .dropna(subset=["Protein conc [pmol]"])
+    )
+    pivot = long_df.pivot_table(
+        index="Replicate", columns=feature_col, values="Protein conc [pmol]", aggfunc="mean"
+    )
+    pivot = pivot.dropna(axis=1, thresh=max(1, int(0.5 * len(pivot))))
+    pivot = pivot.fillna(pivot.median())
+
+    if pivot.shape[0] < 2:
+        raise ValueError("Not enough samples for PCA after dropping missing values.")
+
+    X = StandardScaler().fit_transform(pivot)
+    pca = PCA(n_components=2)
+    coords = pca.fit_transform(X)
+    var_explained = pca.explained_variance_ratio_
+
+    rep_meta = sdrf_data_file[["source name", color_col]].drop_duplicates().set_index("source name")
+    pca_df = pd.DataFrame({"PC1": coords[:, 0], "PC2": coords[:, 1]}, index=pivot.index)
+    pca_df[color_col] = rep_meta.reindex(pca_df.index)[color_col].values
+
+    group2color = _make_group2color(pca_df[color_col].dropna().unique(), color_col)
+
+    plt.figure(figsize=figsize)
+    sns.scatterplot(data=pca_df, x="PC1", y="PC2", hue=color_col, palette=group2color, s=80, edgecolor="k")
+    plt.xlabel(f"PC1 ({100 * var_explained[0]:.1f}%)")
+    plt.ylabel(f"PC2 ({100 * var_explained[1]:.1f}%)")
+    plt.title(title)
+    plt.legend(title=color_col, bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_umap(
+    abs_df: pd.DataFrame,
+    sdrf_data_file: pd.DataFrame,
+    color_col: Optional[str] = None,
+    feature_col: str = "Protein Name",
+    n_neighbors: int = 15,
+    min_dist: float = 0.1,
+    metric: str = "euclidean",
+    random_state: int = 42,
+    figsize: Tuple[int, int] = (8, 6),
+    title: str = "UMAP",
+) -> None:
+    """
+    UMAP scatter plot of samples colored by a metadata column.
+
+    Args:
+        abs_df: Wide output from get_absolute_conc.
+        sdrf_data_file: SDRF metadata table with 'source name' and color_col.
+        color_col: Column in sdrf_data_file to color points by. Defaults to last 'factor value[...]' column.
+        feature_col: Feature axis for the matrix ('Protein Name' or 'Peptide Sequence').
+        n_neighbors: UMAP neighborhood size.
+        min_dist: UMAP minimum distance between embedded points.
+        metric: Distance metric for UMAP.
+        random_state: Random seed for reproducibility.
+        figsize: Figure size.
+        title: Plot title.
+    """
+    try:
+        import umap as umap_lib
+    except ImportError:
+        raise ImportError("umap-learn is required: pip install umap-learn")
+    try:
+        from sklearn.preprocessing import StandardScaler
+    except ImportError:
+        raise ImportError("scikit-learn is required: pip install scikit-learn")
+
+    color_col = _resolve_group_col(sdrf_data_file, color_col)
+    if color_col not in sdrf_data_file.columns:
+        raise KeyError(f"Column '{color_col}' not found in sdrf_data_file.")
+    if "source name" not in sdrf_data_file.columns:
+        raise KeyError("Column 'source name' not found in sdrf_data_file.")
+
+    long_df = (
+        abs_df.reset_index()
+        .melt(id_vars=["qRePS", "Peptide Sequence", "Protein Name"],
+              var_name="Replicate", value_name="Protein conc [pmol]")
+        .dropna(subset=["Protein conc [pmol]"])
+    )
+    pivot = long_df.pivot_table(
+        index="Replicate", columns=feature_col, values="Protein conc [pmol]", aggfunc="mean"
+    )
+    pivot = pivot.dropna(axis=1, thresh=max(1, int(0.5 * len(pivot))))
+    pivot = pivot.fillna(pivot.median())
+
+    if pivot.shape[0] < 2:
+        raise ValueError("Not enough samples for UMAP after dropping missing values.")
+
+    X = StandardScaler().fit_transform(pivot)
+    embedding = umap_lib.UMAP(
+        n_neighbors=n_neighbors, min_dist=min_dist, n_components=2,
+        metric=metric, random_state=random_state,
+    ).fit_transform(X)
+
+    rep_meta = sdrf_data_file[["source name", color_col]].drop_duplicates().set_index("source name")
+    umap_df = pd.DataFrame({"UMAP1": embedding[:, 0], "UMAP2": embedding[:, 1]}, index=pivot.index)
+    umap_df[color_col] = rep_meta.reindex(umap_df.index)[color_col].values
+
+    group2color = _make_group2color(umap_df[color_col].dropna().unique(), color_col)
+
+    plt.figure(figsize=figsize)
+    sns.scatterplot(data=umap_df, x="UMAP1", y="UMAP2", hue=color_col, palette=group2color, s=80, edgecolor="k")
+    plt.xlabel("UMAP1")
+    plt.ylabel("UMAP2")
+    plt.title(title)
+    plt.legend(title=color_col, bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_all_all(
     abs_df: pd.DataFrame,
     sdrf_data_file: pd.DataFrame,
