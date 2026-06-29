@@ -456,7 +456,24 @@ def _render_module(mod: ModuleDoc) -> str:
     )
 
 
+def _read_version() -> str:
+    import re
+    candidate = Path.cwd() / "pyproject.toml"
+    if not candidate.exists():
+        return ""
+    try:
+        import tomllib
+        with open(candidate, "rb") as f:
+            return tomllib.load(f).get("project", {}).get("version", "")
+    except ImportError:
+        pass
+    m = re.search(r'^version\s*=\s*"([^"]+)"', candidate.read_text(), re.MULTILINE)
+    return m.group(1) if m else ""
+
+
 def render_html(modules: list[ModuleDoc], package_name: str) -> str:
+    version = _read_version()
+    version_label = f" {escape(version)}" if version else ""
     toc_items = "".join(
         f'<li><a href="#mod-{escape(m.name)}">{escape(m.name)}</a></li>'
         for m in modules
@@ -472,12 +489,12 @@ def render_html(modules: list[ModuleDoc], package_name: str) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{escape(package_name)} — API Reference</title>
+<title>{escape(package_name)}{version_label} — API Reference</title>
 <style>{_CSS}</style>
 </head>
 <body>
 <div class="page-wrapper">
-<h1 class="page-title">{escape(package_name)} — API Reference</h1>
+<h1 class="page-title">{escape(package_name)}{version_label} — API Reference</h1>
 {toc}
 {body}
 </div>
