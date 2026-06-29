@@ -55,7 +55,7 @@ You can install the dependencies and set up the environment using [Conda](https:
 
 ## To Dos
 
-### Phase 1 — Python Package & PyPI Release
+### Phase 1 — Python Package & PyPI Release (Version 0.x.x)
 
 **1. Code & API clean-up**
 - [x] -1. Move plot functions from DA4K notebook to `prm.py` and expose via `kdm.*` (`map_peptide_sequence`, `plot_peptide_concentration_by_group`, `plot_median_peptide_concentration_by_group`, `plot_all_median_peptide_concentration_by_group`, `plot_all_peptide_concentration_by_group`)
@@ -68,22 +68,22 @@ You can install the dependencies and set up the environment using [Conda](https:
 - [ ] 6. Ensure `__init__.py` exports a clean, stable public API
 
 **2. Package metadata & build**
-- [ ] 7. Update `pyproject.toml`: add missing `pyteomics` dependency, bump version, add classifiers (`python_requires`, `install_requires`)
-- [ ] 8. Add `CHANGELOG.md` with initial release notes
+- [x] 7. Update `pyproject.toml`: add missing `pyteomics` dependency, bump version, add classifiers (`python_requires`, `install_requires`) ✔️ (done)
+- [x] 8. Add `CHANGELOG.md` with initial release notes (included in release & GitHub Action)
 - [x] 9. Add `LICENSE` file (MIT)
 - [x] 10. Verify `pip install -e .` builds cleanly in a fresh environment
 - [x] 11. Build distribution: `python -m build` → inspect `dist/`
 
 **3. Testing & CI**
 - [x] 12. Add unit tests with `pytest` for core modules (`prm.py`, `sdrf.py`)
-- [ ] 13. Add a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs tests on push/PR
+- [x] 13. Add a GitHub Actions workflow (`.github/workflows/release.yml`) for releases (tests run on push/tag)
 - [x] 14. Add a release workflow that publishes docs on version tag push (`.github/workflows/release_docs.yml`); PyPI publish pending
 
 **4. PyPI release**
-- [ ] 15. Register package name on [PyPI](https://pypi.org) (check availability of `kardemumma`)
+- [x] 15. Register package name on [PyPI](https://pypi.org) (check availability of `kardemumma`)
 - [x] 16. Create API token on PyPI and store as `PYPI_API_TOKEN` GitHub secret
-- [ ] 17. Publish first release: `python -m twine upload dist/*` (or via GitHub Actions)
-- [ ] 18. Verify: `pip install kardemumma` works from PyPI
+- [x] 17. Publish first release: `python -m twine upload dist/*` (or via GitHub Actions)
+- [x] 18. Verify: `pip install kardemumma` works from PyPI
 
 ---
 
