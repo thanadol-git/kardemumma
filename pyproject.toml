@@ -39,6 +39,7 @@ kardemumma-preview = "kardemumma.cli.preview:main"
 kardemumma-cutoff  = "kardemumma.cli.cutoff:main"
 kardemumma-report  = "kardemumma.cli.report:main"
 kardemumma-ipynb   = "kardemumma.cli.ipynb:main"
+kardemumma-docs    = "kardemumma.cli.docs:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
