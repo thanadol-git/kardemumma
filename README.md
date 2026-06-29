@@ -92,8 +92,8 @@ The project should be located at the `hot storage` of the lab. One can find the 
 - [ ] 7. Update `pyproject.toml`: add missing `pyteomics` dependency, bump version, add classifiers (`python_requires`, `install_requires`)
 - [ ] 8. Add `CHANGELOG.md` with initial release notes
 - [x] 9. Add `LICENSE` file (MIT)
-- [ ] 10. Verify `pip install -e .` builds cleanly in a fresh environment
-- [ ] 11. Build distribution: `python -m build` → inspect `dist/`
+- [x] 10. Verify `pip install -e .` builds cleanly in a fresh environment
+- [x] 11. Build distribution: `python -m build` → inspect `dist/`
 
 **3. Testing & CI**
 - [x] 12. Add unit tests with `pytest` for core modules (`prm.py`, `sdrf.py`)
@@ -102,7 +102,7 @@ The project should be located at the `hot storage` of the lab. One can find the 
 
 **4. PyPI release**
 - [ ] 15. Register package name on [PyPI](https://pypi.org) (check availability of `kardemumma`)
-- [ ] 16. Create API token on PyPI and store as `PYPI_API_TOKEN` GitHub secret
+- [x] 16. Create API token on PyPI and store as `PYPI_API_TOKEN` GitHub secret
 - [ ] 17. Publish first release: `python -m twine upload dist/*` (or via GitHub Actions)
 - [ ] 18. Verify: `pip install kardemumma` works from PyPI
 
