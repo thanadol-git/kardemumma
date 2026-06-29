@@ -91,14 +91,14 @@ The project should be located at the `hot storage` of the lab. One can find the 
 **2. Package metadata & build**
 - [ ] 7. Update `pyproject.toml`: add missing `pyteomics` dependency, bump version, add classifiers (`python_requires`, `install_requires`)
 - [ ] 8. Add `CHANGELOG.md` with initial release notes
-- [ ] 9. Add `LICENSE` file if missing
+- [x] 9. Add `LICENSE` file (MIT)
 - [ ] 10. Verify `pip install -e .` builds cleanly in a fresh environment
 - [ ] 11. Build distribution: `python -m build` → inspect `dist/`
 
 **3. Testing & CI**
-- [ ] 12. Add unit tests with `pytest` for core modules (`prm.py`, `openswath.py`, `sdrf.py`, etc.)
+- [x] 12. Add unit tests with `pytest` for core modules (`prm.py`, `sdrf.py`)
 - [ ] 13. Add a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs tests on push/PR
-- [ ] 14. Add a release workflow that publishes to PyPI on version tag push
+- [x] 14. Add a release workflow that publishes docs on version tag push (`.github/workflows/release_docs.yml`); PyPI publish pending
 
 **4. PyPI release**
 - [ ] 15. Register package name on [PyPI](https://pypi.org) (check availability of `kardemumma`)
