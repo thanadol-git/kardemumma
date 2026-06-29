@@ -88,7 +88,7 @@ You can install the dependencies and set up the environment using [Conda](https:
 
 ---
 
-### Phase 2 — Nextflow Pipeline
+### Phase 2 — Nextflow Pipeline (Version 2.x.x)
 
 **5. Pipeline design**
 - [ ] 19. Define end-to-end workflow: raw input → SDRF validation → OpenSWATH/Skyline export → PRM QC → ratio/DA output
