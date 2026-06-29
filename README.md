@@ -6,6 +6,13 @@ This repository contains the Python package for processing and quality-checking 
 
 > The repository name has now been updated from `skyline_qc` to `kardemumma` throughout the project.
 
+## Documentation
+
+API reference (HTML and PDF) is attached to each [GitHub Release](https://github.com/thanadol-git/kardemumma/releases). Download and open in a browser:
+
+- [kardemumma_api.html](https://github.com/thanadol-git/kardemumma/releases/latest/download/kardemumma_api.html)
+- [kardemumma_api.pdf](https://github.com/thanadol-git/kardemumma/releases/latest/download/kardemumma_api.pdf)
+
 ## Installation
 
 You can install the dependencies and set up the environment using [Conda](https://docs.conda.io/en/latest/):
