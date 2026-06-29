@@ -23,7 +23,13 @@ dependencies = [
     "sdrf-pipelines[ontology]",
     "matplotlib-venn",
     "scikit-learn",
+    "umap-learn",
 ]
+
+[project.scripts]
+kardemumma-preview = "kardemumma.cli.preview:main"
+kardemumma-cutoff  = "kardemumma.cli.cutoff:main"
+kardemumma-report  = "kardemumma.cli.report:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
