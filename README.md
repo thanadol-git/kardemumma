@@ -67,6 +67,7 @@ You can install the dependencies and set up the environment using [Conda](https:
 - [ ] 5. Audit all public functions — consistent naming, type hints, docstrings
 - [ ] 6. Ensure `__init__.py` exports a clean, stable public API
 - [ ] Create landing logo and banners.
+- [ ] Remove 3 proejct ipynb
 
 **2. Package metadata & build**
 - [x] 7. Update `pyproject.toml`: add missing `pyteomics` dependency, bump version, add classifiers (`python_requires`, `install_requires`) ✔️ (done)
