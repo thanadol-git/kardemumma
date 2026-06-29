@@ -12,6 +12,9 @@ def _make_notebook(skyline_path, sdrf_path, dotp, light_cutoff, heavy_cutoff,
     md = nbformat.v4.new_markdown_cell
 
     cells = [
+        # --- Install ---
+        code("%pip install kardemumma"),
+
         # --- Environment check ---
         code(
             "import sys, kardemumma\n"
