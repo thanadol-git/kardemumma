@@ -23,7 +23,7 @@ You can install the dependencies and set up the environment using [Conda](https:
    cd kardemumma
    ```
 
-2. Create the environment using the provided `environment.yml` file:
+2. Create the Conda environment using the `config.yml` file:
    ```bash
    conda env create -f environment.yml -p ./env
    ```
