@@ -116,6 +116,7 @@ You can install the dependencies and set up the environment using [Conda](https:
 ## Key developers
 - Thanadol Sutantiwanichkul
 - Justin Sing
+- Yuqi Zheng
 - Khue Hua Tran Minh
 - Maria-Jesus Iglesias Mareque
 - Fredrik Edfors
