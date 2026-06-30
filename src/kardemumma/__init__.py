@@ -52,7 +52,6 @@ from .prm import (
     plot_heavy_light_scatter,
     plot_peptide_counts,
     plot_pool_boxplot,
-    plot_pool_pca,
     plot_pool_heatmap,
     plot_intra_plate_cv_stats,
     plot_inter_plate_cv_kde,
@@ -68,6 +67,9 @@ from .prm import (
     plot_all_all,
     plot_pca,
     plot_umap,
+)
+from .batch_correct import (
+    plot_pool_pca,
 )
 from .openswath import (
     import_openswath_file,
@@ -138,12 +140,13 @@ __all__ = [
     "dot_product_summary",
     "retention_time_deviation",
     "summarize_prm",
+    # Batch correction
+    "plot_pool_pca",
     # PRM — plots
     "plot_library_dot_product_distribution",
     "plot_heavy_light_scatter",
     "plot_peptide_counts",
     "plot_pool_boxplot",
-    "plot_pool_pca",
     "plot_pool_heatmap",
     "plot_intra_plate_cv_stats",
     "plot_inter_plate_cv_kde",
