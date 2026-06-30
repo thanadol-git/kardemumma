@@ -68,7 +68,6 @@ from .prm import (
     plot_umap,
 )
 from .batch_correct import (
-    detect_batch_effect,
     plot_pool_pca,
     permanova_batch_effects,
 )
@@ -141,7 +140,6 @@ __all__ = [
     "retention_time_deviation",
     "summarize_prm",
     # Batch correction
-    "detect_batch_effect",
     "plot_pool_pca",
     "permanova_batch_effects",
     # PRM — plots
