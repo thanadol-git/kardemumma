@@ -256,4 +256,56 @@ def permanova_batch_effects(
             "n_permutations": n_permutations,
         })
 
-    return pd.DataFrame(results).sort_values("p_value")
+    result_df = pd.DataFrame(results).sort_values("p_value").reset_index(drop=True)
+
+    _print_permanova_summary(result_df, n_permutations)
+
+    return result_df
+
+
+def _r2_label(r2: float) -> str:
+    if r2 >= 0.25:
+        return "large"
+    if r2 >= 0.06:
+        return "medium"
+    return "small"
+
+
+def _print_permanova_summary(df: pd.DataFrame, n_permutations: int) -> None:
+    sig = df[df["p_value"] < 0.05].copy()
+    ns  = df[df["p_value"] >= 0.05].copy()
+    skipped = df[df["p_value"].isna()].copy()
+
+    print(f"\nPERMANOVA batch effect summary  ({n_permutations} permutations)")
+    print("=" * 60)
+
+    if sig.empty:
+        print("No significant batch effects detected (all p >= 0.05).")
+    else:
+        print(f"Significant factors (p < 0.05):  {len(sig)}")
+        for _, row in sig.iterrows():
+            effect = _r2_label(row["R2"])
+            stars = "***" if row["p_value"] < 0.001 else ("**" if row["p_value"] < 0.01 else "*")
+            print(
+                f"  {stars}  {row['variable']}\n"
+                f"       p = {row['p_value']:.4f}  |  F = {row['F_statistic']:.3f}"
+                f"  |  R² = {row['R2']:.3f} ({effect} effect)"
+                f"  |  {row['n_groups']} groups, {row['n_samples']} samples"
+            )
+
+    if not ns.empty:
+        print(f"\nNon-significant factors (p >= 0.05):  {len(ns)}")
+        for _, row in ns.iterrows():
+            print(
+                f"       {row['variable']}\n"
+                f"       p = {row['p_value']:.4f}  |  F = {row['F_statistic']:.3f}"
+                f"  |  R² = {row['R2']:.3f}"
+                f"  |  {row['n_groups']} groups, {row['n_samples']} samples"
+            )
+
+    if not skipped.empty:
+        print(f"\nSkipped (insufficient data):")
+        for _, row in skipped.iterrows():
+            print(f"       {row['variable']}  ({row['n_groups']} groups, {row['n_samples']} samples)")
+
+    print("=" * 60)
