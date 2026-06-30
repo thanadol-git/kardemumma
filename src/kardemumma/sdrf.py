@@ -81,7 +81,9 @@ def readout_ms_type(sdrf_file: str) -> list:
             f"Column '{col_name}' not found in SDRF file: {sdrf_file}"
         )
 
-    return df[col_name].drop_duplicates().tolist()
+    ms_types = df[col_name].drop_duplicates().tolist()
+    print("Type(s) of MS experiment(s) in SDRF:", ", ".join(str(t) for t in ms_types))
+    return ms_types
 
 def csv_to_tsv(csv_file: str, tsv_file: str) -> None:
     """
