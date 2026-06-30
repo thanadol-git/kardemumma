@@ -126,3 +126,215 @@ def plot_pool_pca(
 
     # If users want loadings, return as well (comment/uncomment as needed)
     # return loadings_df
+
+
+def detect_batch_effect(
+    df: pd.DataFrame,
+    col_plate: str = "Plate",
+    ratio_col: str = "RatioLightToHeavy",
+    log_transform: bool = False,
+    alpha: float = 0.05,
+    verbose: bool = True,
+) -> dict:
+    """
+    Test for batch (plate) effect using ANOVA on peptide ratios across plates.
+
+    Returns:
+        {
+            "batch_effect": bool,
+            "p_value": float,
+            "significance_level": float,
+            "ols_model": statsmodels OLS fit,
+            "anova_result": DataFrame,
+            "message": str
+        }
+    """
+    try:
+        import statsmodels.formula.api as smf
+        from statsmodels.stats.anova import anova_lm
+    except ImportError:
+        raise ImportError("statsmodels is required for detect_batch_effect")
+
+    cols = ["Peptide Sequence", "Replicate", col_plate, ratio_col]
+    missing_cols = [c for c in cols if c not in df.columns]
+    if missing_cols:
+        raise KeyError(f"Missing required columns: {missing_cols}")
+
+    d = df[cols].drop_duplicates().copy()
+    d["ratio_fit"] = pd.to_numeric(d[ratio_col], errors="coerce")
+
+    if log_transform:
+        d = d[d["ratio_fit"] > 0].copy()
+        d["ratio_fit"] = np.log(d["ratio_fit"])
+
+    if d.empty or d["ratio_fit"].isna().all():
+        raise ValueError("No valid ratio values to test for batch effect.")
+
+    model = smf.ols(
+        f'ratio_fit ~ C(Q("{col_plate}")) + C(Q("Peptide Sequence"))', data=d
+    ).fit()
+    anova_res = anova_lm(model, typ=2)
+
+    plate_row = [idx for idx in anova_res.index if str(idx).lower() == str(col_plate).lower()]
+    p_col = next((c for c in anova_res.columns if c.upper().startswith("P")), None)
+    if plate_row and p_col:
+        p_value = float(anova_res.loc[plate_row[0], p_col])
+    else:
+        match_rows = [idx for idx in anova_res.index if col_plate.lower() in str(idx).lower()]
+        p_value = float(anova_res.loc[match_rows[0], p_col]) if (match_rows and p_col) else np.nan
+
+    has_batch_effect = not np.isnan(p_value) and p_value < alpha
+
+    if np.isnan(p_value):
+        message = "Could not extract batch (plate) effect p-value."
+    elif has_batch_effect:
+        message = (
+            f"Plate/batch effect detected: p={p_value:.3g} < alpha={alpha} "
+            "(batch correction recommended)."
+        )
+    else:
+        message = (
+            f"No significant plate/batch effect detected: p={p_value:.3g} >= alpha={alpha}."
+        )
+    if verbose:
+        print(message)
+
+    return {
+        "batch_effect": has_batch_effect,
+        "p_value": p_value,
+        "significance_level": alpha,
+        "ols_model": model,
+        "anova_result": anova_res,
+        "message": message,
+    }
+
+
+def _permanova_f(dist_sq: np.ndarray, labels: np.ndarray) -> float:
+    """Compute the PERMANOVA pseudo-F statistic from a squared distance matrix."""
+    n = len(labels)
+    groups = np.unique(labels)
+    k = len(groups)
+
+    # Total sum of squares: SS_T = sum of all squared distances / n
+    ss_total = np.sum(dist_sq) / n
+
+    # Within-group sum of squares
+    ss_within = 0.0
+    for g in groups:
+        idx = np.where(labels == g)[0]
+        ng = len(idx)
+        if ng > 1:
+            ss_within += np.sum(dist_sq[np.ix_(idx, idx)]) / ng
+
+    ss_between = ss_total - ss_within
+    if ss_within == 0:
+        return np.inf
+    return (ss_between / (k - 1)) / (ss_within / (n - k))
+
+
+def permanova_batch_effects(
+    df: pd.DataFrame,
+    col_ratio: str = "RatioLightToHeavy",
+    n_permutations: int = 999,
+    log_transform: bool = True,
+) -> pd.DataFrame:
+    """
+    Test batch effects for all metadata columns starting with 'characteristics'
+    using PERMANOVA on log-transformed peptide ratios.
+
+    For each characteristics column, the function builds a replicate × peptide
+    matrix, computes a Euclidean distance matrix, and runs PERMANOVA to test
+    whether replicates cluster by that metadata variable.
+
+    Args:
+        df: DataFrame with ``Replicate``, ``Peptide Sequence``, *col_ratio*, and
+            one or more ``characteristics[*]`` columns.
+        col_ratio: Column containing the light-to-heavy ratio.
+        n_permutations: Number of label permutations for the p-value (default 999).
+        log_transform: Log-transform ratios before computing distances (default True).
+
+    Returns:
+        DataFrame with one row per characteristics column and columns:
+        ``variable``, ``F_statistic``, ``p_value``, ``R2``, ``n_groups``,
+        ``n_samples``, ``n_permutations``.
+    """
+    char_cols = [c for c in df.columns if c.startswith("characteristics")]
+    if not char_cols:
+        raise ValueError("No columns starting with 'characteristics' found in df.")
+
+    required = ["Replicate", "Peptide Sequence", col_ratio]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing required columns: {missing}")
+
+    # Build replicate × peptide pivot (one value per cell)
+    pivot = df.pivot_table(
+        index="Replicate", columns="Peptide Sequence", values=col_ratio, aggfunc="mean"
+    ).dropna(axis=1).dropna(axis=0)
+
+    if log_transform:
+        pivot = np.log(pivot.clip(lower=1e-12))
+
+    X = pivot.values
+    replicates = pivot.index.tolist()
+
+    # Euclidean distance matrix → squared distances
+    from sklearn.metrics import pairwise_distances
+    dist = pairwise_distances(X, metric="euclidean")
+    dist_sq = dist ** 2
+
+    rng = np.random.default_rng(42)
+    results = []
+
+    for col in char_cols:
+        # Map each replicate to its group label (take first occurrence)
+        rep_meta = (
+            df[["Replicate", col]]
+            .drop_duplicates(subset="Replicate")
+            .set_index("Replicate")[col]
+        )
+        labels = np.array([str(rep_meta.get(r, np.nan)) for r in replicates])
+
+        # Drop replicates with missing metadata
+        valid = labels != "nan"
+        if valid.sum() < 3 or len(np.unique(labels[valid])) < 2:
+            results.append({
+                "variable": col,
+                "F_statistic": np.nan,
+                "p_value": np.nan,
+                "R2": np.nan,
+                "n_groups": int(np.unique(labels[valid]).size),
+                "n_samples": int(valid.sum()),
+                "n_permutations": n_permutations,
+            })
+            continue
+
+        labels_v = labels[valid]
+        dist_sq_v = dist_sq[np.ix_(valid, valid)]
+        n = len(labels_v)
+        k = len(np.unique(labels_v))
+
+        f_obs = _permanova_f(dist_sq_v, labels_v)
+        ss_total = np.sum(dist_sq_v) / n
+        ss_within = ss_total - (f_obs * ss_total * (k - 1)) / (f_obs * (k - 1) + (n - k))
+        r2 = 1.0 - ss_within / ss_total if ss_total > 0 else np.nan
+
+        # Permutation test
+        count_ge = 0
+        for _ in range(n_permutations):
+            perm_labels = rng.permutation(labels_v)
+            if _permanova_f(dist_sq_v, perm_labels) >= f_obs:
+                count_ge += 1
+        p_value = (count_ge + 1) / (n_permutations + 1)
+
+        results.append({
+            "variable": col,
+            "F_statistic": round(f_obs, 4),
+            "p_value": round(p_value, 4),
+            "R2": round(r2, 4),
+            "n_groups": k,
+            "n_samples": n,
+            "n_permutations": n_permutations,
+        })
+
+    return pd.DataFrame(results).sort_values("p_value")
