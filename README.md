@@ -55,6 +55,10 @@ You can install the dependencies and set up the environment using [Conda](https:
 
 ## Requirement
 
+### To run the script
+- Result files 
+- [targeted-SDRF](https://github.com/bigbio/sdrf-templates/issues/44)
+
 ### Notes
 - All required dependencies will be installed via Conda and pip as specified in `environment.yml`.
 - Python 3.10 is recommended.
