@@ -355,7 +355,10 @@ class MergeFiles:
 
         # Columns required for merging
         required_skyline_cols = ["File Name"]
-        required_sdrf_cols = ["comment[data file]", "characteristics[Sample]", "characteristics[plate]"]
+        required_sdrf_cols = ["comment[data file]"] + [
+            col for col in self.sdrf_df.columns if col.startswith("characteristics[")
+        ]
+   
 
         # Add all columns in sdrf_df that start with 'factor value'
         factor_value_cols = [col for col in self.sdrf_df.columns if col.startswith("factor value")]
