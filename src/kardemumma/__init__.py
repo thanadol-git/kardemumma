@@ -73,6 +73,11 @@ from .batch_correct import (
     correct_ratio_by_factors,
     correct_ratio_by_irt,
 )
+from .downstream import (
+    DownStream,
+    enrichment_analysis,
+    plot_enrichment,
+)
 from .openswath import (
     import_openswath_file,
     filter_best_peak_group,
@@ -146,6 +151,10 @@ __all__ = [
     "permanova_batch_effects",
     "correct_ratio_by_factors",
     "correct_ratio_by_irt",
+    # Downstream analysis
+    "DownStream",
+    "enrichment_analysis",
+    "plot_enrichment",
     # PRM — plots
     "plot_library_dot_product_distribution",
     "plot_heavy_light_scatter",

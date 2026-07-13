@@ -4,12 +4,14 @@ from pathlib import Path
 
 
 def _make_notebook(skyline_path, sdrf_path, dotp, light_cutoff, heavy_cutoff,
-                   pool_value, cv_percentile):
+                   pool_value, group_a, group_b, group_col, id_col):
     import nbformat
 
     nb = nbformat.v4.new_notebook()
     code = nbformat.v4.new_code_cell
     md = nbformat.v4.new_markdown_cell
+
+    group_col_kwarg = f",\n    group_col={group_col!r}" if group_col else ""
 
     cells = [
         # --- Install ---
@@ -35,19 +37,16 @@ def _make_notebook(skyline_path, sdrf_path, dotp, light_cutoff, heavy_cutoff,
 
         # --- Skyline import ---
         code(
-            f'skyline_path = "{skyline_path}"\n\n'
+            f"skyline_path = {skyline_path!r}\n\n"
             "skyline_importer = kdm.ImportSkylineFile(skyline_path)\n"
             "skyline_data = skyline_importer.import_skyline_file()"
         ),
 
         # --- SDRF readout ---
         code(
-            f'sdrf_path = "{sdrf_path}"\n\n'
+            f"sdrf_path = {sdrf_path!r}\n\n"
             "kdm.readout_ms_type(sdrf_path)"
         ),
-
-        # --- iRT peptides ---
-        code("kdm.get_irt_peptides(skyline_data)"),
 
         # --- SDRF import + file comparison ---
         code(
@@ -55,8 +54,8 @@ def _make_notebook(skyline_path, sdrf_path, dotp, light_cutoff, heavy_cutoff,
             "sdrf_data_file = sdrf_data.import_sdrf_file()\n\n"
             "not_in_sdrf = set(skyline_data['File Name']) - set(sdrf_data_file['comment[data file]'])\n"
             "not_in_skyline = set(sdrf_data_file['comment[data file]']) - set(skyline_data['File Name'])\n"
-            "print('In Skyline but not SDRF:', not_in_sdrf)\n"
-            "print('In SDRF but not Skyline:', not_in_skyline)"
+            "print('Sample names in the Skyline file but not in the SDRF file:', not_in_sdrf)\n"
+            "print('Sample names in the SDRF file but not in the Skyline file:', not_in_skyline)"
         ),
 
         # --- QC samples ---
@@ -106,123 +105,71 @@ def _make_notebook(skyline_path, sdrf_path, dotp, light_cutoff, heavy_cutoff,
         # --- Pool data ---
         code(
             f"skyline_pool = skyline_merge_obj.select_pool_data(\n"
-            f"    col_sample='characteristics[Sample]', sample_value='{pool_value}'\n"
+            f"    col_sample='characteristics[Sample]', sample_value={pool_value!r}\n"
             f")"
         ),
 
         # --- Pool boxplot ---
         code("kdm.plot_pool_boxplot(skyline_pool)"),
 
-        # --- Intra-plate CV ---
-        code(
-            "peptide_plate_stats = kdm.calculate_intra_plate_cv(\n"
-            "    skyline_pool, col_name='characteristics[plate]'\n"
-            ")\n"
-            "kdm.plot_intra_plate_cv_stats(peptide_plate_stats, col_name='characteristics[plate]')"
+        # --- Batch correction section ---
+        md(
+            "## Batch correction: PERMANOVA-driven per-peptide correction (batch_correct.py)\n\n"
+            "Test every `characteristics[*]` column for batch effects with PERMANOVA, then use "
+            "`correct_ratio_by_factors` to median-center ratios per peptide for each significant "
+            "factor (sequentially)."
         ),
 
-        # --- Inter-plate CV ---
+        # --- PERMANOVA test ---
         code(
-            "interplate_cv = kdm.calculate_inter_plate_cv(peptide_plate_stats)\n"
-            "kdm.plot_inter_plate_cv_kde(interplate_cv)"
+            "# PERMANOVA test for batch effects across all characteristics columns\n"
+            "permanova_results = kdm.permanova_batch_effects(skyline_pool)\n\n"
+            "# Suggested factors to correct for (p < 0.05)\n"
+            'sig_factors = permanova_results[permanova_results["p_value"] < 0.05]["variable"].tolist()\n'
+            'print("Suggested factors to correct for batch effect (p < 0.05):", sig_factors)\n\n'
+            "permanova_results"
         ),
 
-        # --- Inter-plate CV table ---
+        # --- Apply correction ---
         code(
-            "interplate_cv.head()\n"
-            "print('Inter-plate CV (low to high):')\n"
-            "print(interplate_cv[interplate_cv['inter_plate_cv'] < 0.1])"
-        ),
-
-        # --- Cumulative CV ---
-        code("kdm.plot_cumulative_peptide_count_by_cv(interplate_cv)"),
-
-        # --- Normalization peptides ---
-        code(
-            f"selected_norm_peptides = kdm.get_lowest_cv_peptides(interplate_cv, {cv_percentile})\n"
-            "print(selected_norm_peptides)"
-        ),
-
-        # --- Pool selected df ---
-        code(
-            "pool_selected_df = skyline_pool[\n"
-            "    skyline_pool['Peptide Sequence'].isin(selected_norm_peptides)\n"
-            "]\n"
-            "pool_selected_df"
-        ),
-
-        # --- Pool PCA (full merge) ---
-        code("kdm.plot_pool_pca(skyline_merge)"),
-
-        # --- Pool PCA (norm peptides only) ---
-        code("kdm.plot_pool_pca(pool_selected_df)"),
-
-        # --- Pool boxplot (norm peptides) ---
-        code("kdm.plot_pool_boxplot(pool_selected_df)"),
-
-        # --- Plate conversion factors ---
-        code(
-            "plate_factor_table, conversion_factors, model = kdm.get_plate_conversion_factors(\n"
-            "    pool_selected_df, col_plate='characteristics[plate]', log_transform=True\n"
+            "# Correct ratios by removing identified batch factors for pool data\n"
+            "skyline_pool_corrected = kdm.correct_ratio_by_factors(\n"
+            "    skyline_pool,\n"
+            "    factors=sig_factors,\n"
+            '    col_ratio="RatioLightToHeavy",\n'
+            ")\n\n"
+            "# Correct ratio for all data\n"
+            "skyline_corrected = kdm.correct_ratio_by_factors(\n"
+            "    skyline_merge,\n"
+            "    factors=sig_factors,\n"
+            '    col_ratio="RatioLightToHeavy",\n'
             ")"
         ),
 
-        # --- Batch effect test ---
+        # --- Corrected PCA ---
+        code('kdm.plot_pool_pca(skyline_corrected, col_ratio="RatioLightToHeavy_corrected")'),
+
+        # --- Verify correction ---
         code(
-            "batch_dict = kdm.detect_batch_effect(\n"
-            "    pool_selected_df, col_plate='characteristics[plate]',\n"
-            "    ratio_col='RatioLightToHeavy', log_transform=True\n"
-            ")"
+            "# Verify batch correction — PERMANOVA on corrected ratios\n"
+            "permanova_corrected = kdm.permanova_batch_effects(\n"
+            "    skyline_pool_corrected,\n"
+            '    col_ratio="RatioLightToHeavy_corrected",\n'
+            ")\n\n"
+            "# Visual check\n"
+            'kdm.plot_pool_pca(skyline_pool_corrected, col_ratio="RatioLightToHeavy_corrected")'
         ),
 
-        # --- Show factor tables ---
-        code("plate_factor_table"),
-        code("conversion_factors"),
-
-        # --- Plot conversion factors ---
+        # --- Build adjusted dataset from the PERMANOVA-corrected ratios ---
         code(
-            "kdm.plot_plate_conversion_factors(\n"
-            "    pool_selected_df, col_plate='characteristics[plate]', log_transform=True\n"
-            ")"
-        ),
-
-        # --- Build adjusted dataset ---
-        code(
-            "skyline_merge_adj = skyline_merge.copy()\n"
-            "skyline_merge_adj = skyline_merge_adj[\n"
-            "    ~skyline_merge_adj['Replicate'].isin(qc_samples)\n"
-            "]"
-        ),
-
-        # --- Apply batch correction ---
-        code(
-            "skyline_merge_adj = kdm.adjust_ratio_by_plate(skyline_merge_adj, conversion_factors)\n"
+            "# get_absolute_conc reads from 'RatioLightToHeavy', so carry the\n"
+            "# PERMANOVA-corrected ratio into that column for the downstream steps.\n"
+            "skyline_merge_adj = skyline_corrected.copy()\n"
+            "# Some QC replicates can still be present in skyline_merge even after the\n"
+            "# earlier remove_qc_samples() call -- scrub them again before absolute quant.\n"
+            "skyline_merge_adj = skyline_merge_adj[~skyline_merge_adj['Replicate'].isin(qc_samples)]\n"
+            'skyline_merge_adj["RatioLightToHeavy"] = skyline_merge_adj["RatioLightToHeavy_corrected"]\n'
             "skyline_merge_adj.head()"
-        ),
-
-        # --- Pool adjusted data ---
-        code(
-            f"pool_data_adj = skyline_merge_adj[\n"
-            f"    skyline_merge_adj['characteristics[Sample]'] == '{pool_value}'\n"
-            f"].copy()\n"
-            "pool_data_adj = pool_data_adj.sort_values(by='characteristics[plate]')\n"
-            "pool_data_adj.head()"
-        ),
-
-        # --- Pool PCA (adjusted) ---
-        code("kdm.plot_pool_pca(pool_data_adj)"),
-
-        # --- Pool boxplot (adjusted) ---
-        code("kdm.plot_pool_boxplot(pool_data_adj)"),
-
-        # --- Verify normalization peptides after correction ---
-        code(
-            "pool_selected_adj = pool_data_adj[\n"
-            "    pool_data_adj['Peptide Sequence'].isin(selected_norm_peptides)\n"
-            "]\n"
-            "kdm.plot_plate_conversion_factors(\n"
-            "    pool_selected_adj, col_plate='characteristics[plate]', log_transform=True\n"
-            ")"
         ),
 
         # --- Absolute quantification section ---
@@ -235,16 +182,78 @@ def _make_notebook(skyline_path, sdrf_path, dotp, light_cutoff, heavy_cutoff,
             "qreps_table.head()"
         ),
 
-        # --- Inspect adjusted data ---
-        code("skyline_merge_adj.head()"),
-
-        # --- Pool PCA on adjusted merge ---
-        code("kdm.plot_pool_pca(skyline_merge_adj)"),
-
         # --- Absolute concentrations ---
         code(
             "abs_df = kdm.get_absolute_conc(qreps_table, skyline_merge_adj)\n"
             "abs_df.head()"
+        ),
+
+        # --- Downstream analysis section ---
+        md(
+            "# Downstream analysis\n\n"
+            "Differential expression and pathway/gene-set enrichment on the absolute peptide "
+            "concentrations computed above (`abs_df`)."
+        ),
+        md(
+            "## Differential expression\n\n"
+            f"Compare peptide-level absolute concentrations between two SDRF groups "
+            f"(`{group_a}` vs `{group_b}`) with `DownStream` "
+            "(Welch's t-test per peptide, Benjamini-Hochberg adjusted)."
+        ),
+
+        # --- DE ---
+        code(
+            "# Differential expression between two groups of the SDRF primary variable column\n"
+            "# (defaults to the last 'factor value[...]' column). abs_df is the wide output\n"
+            "# of get_absolute_conc above -- DownStream handles melting/merging with sdrf internally.\n"
+            "de = kdm.DownStream(\n"
+            "    abs_df, sdrf_data_file,\n"
+            f"    group_a={group_a!r}, group_b={group_b!r},\n"
+            f"    id_col={id_col!r}{group_col_kwarg}\n"
+            ")\n"
+            "de.results.head()"
+        ),
+
+        # --- Volcano plot ---
+        code("de.plot_volcano()"),
+
+        # --- Enrichment section ---
+        md(
+            "## Pathway / gene-set enrichment\n\n"
+            "Test the significant peptide hits from the differential expression step against "
+            "pathway/gene-set definitions with a hypergeometric (Fisher's exact) test. Replace "
+            "the `pathways` placeholder below with a real gene-set database (e.g. Reactome, "
+            "KEGG, GO) keyed by peptide/protein ID."
+        ),
+
+        # --- Enrichment test ---
+        code(
+            f'sig_hits = de.results.loc[de.results["padj"] < 0.05, {id_col!r}].tolist()\n'
+            f'background = de.results[{id_col!r}].tolist()\n'
+            'print(f"{len(sig_hits)} significant peptides (padj < 0.05) out of {len(background)} tested")\n\n'
+            "# TODO: replace with a real pathway / gene-set database mapping\n"
+            "# pathway name -> list of member peptide/protein IDs drawn from `background`.\n"
+            "pathways = {\n"
+            '    "Example pathway A": background[:5],\n'
+            '    "Example pathway B": background[5:10],\n'
+            "}\n\n"
+            "if sig_hits:\n"
+            "    enrichment_results = kdm.enrichment_analysis(\n"
+            "        hit_ids=sig_hits,\n"
+            "        pathways=pathways,\n"
+            "        background_ids=background,\n"
+            "        min_overlap=1,\n"
+            "    )\n"
+            "    display(enrichment_results)\n"
+            "else:\n"
+            "    enrichment_results = None\n"
+            '    print("No significant hits at padj < 0.05 -- skip enrichment test.")'
+        ),
+
+        # --- Enrichment plot ---
+        code(
+            "if enrichment_results is not None and not enrichment_results.empty:\n"
+            "    kdm.plot_enrichment(enrichment_results)"
         ),
     ]
 
@@ -257,7 +266,10 @@ def main():
         prog="kardemumma-ipynb",
         description=(
             "Generate a ratio analysis Jupyter notebook with pre-filled file paths "
-            "and parameters. The output notebook mirrors the ratio_MORPHEUS analysis flow."
+            "and parameters. The output notebook mirrors the ratio_MORPHEUS analysis "
+            "flow, using PERMANOVA-driven per-peptide batch correction "
+            "(kardemumma.batch_correct) followed by differential expression / "
+            "pathway enrichment on the absolute quantification."
         ),
     )
     parser.add_argument("--skyline", required=True, metavar="CSV",
@@ -277,8 +289,17 @@ def main():
     parser.add_argument("--pool-value", default="Pool", metavar="STR",
                         help="Value in characteristics[Sample] marking pool samples "
                              "(default: Pool)")
-    parser.add_argument("--cv-percentile", type=float, default=10.0, metavar="PCT",
-                        help="Inter-plate CV percentile for normalization peptides (default: 10)")
+    parser.add_argument("--group-a", required=True, metavar="LABEL",
+                        help="First group label to compare for differential expression "
+                             "(value in the SDRF group column)")
+    parser.add_argument("--group-b", required=True, metavar="LABEL",
+                        help="Second group label to compare for differential expression")
+    parser.add_argument("--group-col", default=None, metavar="COLUMN",
+                        help="SDRF column to compare group_a/group_b on. Defaults to the "
+                             "last 'factor value[...]' column")
+    parser.add_argument("--id-col", default="Peptide Sequence", metavar="COLUMN",
+                        help="Feature column to test in differential expression: "
+                             "'Peptide Sequence' or 'Protein Name' (default: Peptide Sequence)")
     args = parser.parse_args()
 
     try:
@@ -298,7 +319,10 @@ def main():
         light_cutoff=args.light_cutoff,
         heavy_cutoff=args.heavy_cutoff,
         pool_value=args.pool_value,
-        cv_percentile=args.cv_percentile,
+        group_a=args.group_a,
+        group_b=args.group_b,
+        group_col=args.group_col,
+        id_col=args.id_col,
     )
 
     nb_path = out / args.name
@@ -313,6 +337,8 @@ def main():
     print(f"  dotp          : {args.dotp}")
     print(f"  light/heavy   : {args.light_cutoff} / {args.heavy_cutoff}")
     print(f"  pool value    : {args.pool_value}")
-    print(f"  cv percentile : {args.cv_percentile}")
+    print(f"  group a / b   : {args.group_a} / {args.group_b}")
+    print(f"  group col     : {args.group_col or '(auto: last factor value[...] column)'}")
+    print(f"  id col        : {args.id_col}")
     print()
     print("Open with:  jupyter lab " + str(nb_path))
