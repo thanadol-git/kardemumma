@@ -105,7 +105,7 @@ def _make_notebook(skyline_path, sdrf_path, dotp, light_cutoff, heavy_cutoff,
         # --- Pool data ---
         code(
             f"skyline_pool = skyline_merge_obj.select_pool_data(\n"
-            f"    col_sample='characteristics[Sample]', sample_value={pool_value!r}\n"
+            f"    label_col='characteristics[Sample]', pool_label={pool_value!r}\n"
             f")"
         ),
 
@@ -312,9 +312,12 @@ def main():
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
 
+    skyline_path = str(Path(args.skyline).resolve())
+    sdrf_path = str(Path(args.sdrf).resolve())
+
     nb = _make_notebook(
-        skyline_path=args.skyline,
-        sdrf_path=args.sdrf,
+        skyline_path=skyline_path,
+        sdrf_path=sdrf_path,
         dotp=args.dotp,
         light_cutoff=args.light_cutoff,
         heavy_cutoff=args.heavy_cutoff,
@@ -332,8 +335,8 @@ def main():
     print(f"Notebook written → {nb_path}")
     print()
     print("Parameters embedded:")
-    print(f"  Skyline       : {args.skyline}")
-    print(f"  SDRF          : {args.sdrf}")
+    print(f"  Skyline       : {skyline_path}")
+    print(f"  SDRF          : {sdrf_path}")
     print(f"  dotp          : {args.dotp}")
     print(f"  light/heavy   : {args.light_cutoff} / {args.heavy_cutoff}")
     print(f"  pool value    : {args.pool_value}")
