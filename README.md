@@ -10,8 +10,8 @@ This repository contains the Python package for processing and quality-checking 
 
 API reference (HTML and PDF) is attached to each [GitHub Release](https://github.com/thanadol-git/kardemumma/releases). Download and open in a browser:
 
-- [kardemumma_api.html](https://github.com/thanadol-git/kardemumma/releases/latest/download/kardemumma_api.html)
-- [kardemumma_api.pdf](https://github.com/thanadol-git/kardemumma/releases/latest/download/kardemumma_api.pdf)
+- [📖 API Documentation (HTML)](https://github.com/thanadol-git/kardemumma/releases/latest/download/kardemumma_api.html)
+- [📄 API Documentation (PDF)](https://github.com/thanadol-git/kardemumma/releases/latest/download/kardemumma_api.pdf)
 
 ## Installation
 

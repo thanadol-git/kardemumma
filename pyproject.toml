@@ -12,6 +12,7 @@ authors = [
     {name = "Thanadol Sutantiwanichkul", email = "khunkoei@gmail.com"},
 ]
 license = "MIT"
+keywords = ["proteomics", "mass spectrometry", "PRM", "quality control", "batch correction"]
 dependencies = [
     "requests",
     "pandas",
@@ -28,6 +29,7 @@ dependencies = [
     "pyteomics",
 ]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
@@ -47,6 +49,7 @@ where = ["src"]
 [project.urls]
 Homepage = "https://github.com/thanadol-git/kardemumma"
 Issue = "https://github.com/thanadol-git/kardemumma/issues"
+Changelog = "https://github.com/thanadol-git/kardemumma/releases"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

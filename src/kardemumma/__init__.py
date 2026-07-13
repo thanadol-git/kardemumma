@@ -37,7 +37,6 @@ from .prm import (
     # Plate Normalization
     plate_peptide_anova,
     get_plate_conversion_factors,
-    detect_batch_effect,
     plot_plate_conversion_factors,
     adjust_ratio_by_plate,
     get_absolute_conc,
@@ -70,6 +69,9 @@ from .prm import (
 )
 from .batch_correct import (
     plot_pool_pca,
+    permanova_batch_effects,
+    correct_ratio_by_factors,
+    correct_ratio_by_irt,
 )
 from .openswath import (
     import_openswath_file,
@@ -130,7 +132,6 @@ __all__ = [
     # PRM — plate normalisation
     "plate_peptide_anova",
     "get_plate_conversion_factors",
-    "detect_batch_effect",
     "plot_plate_conversion_factors",
     "adjust_ratio_by_plate",
     "get_absolute_conc",
@@ -142,6 +143,9 @@ __all__ = [
     "summarize_prm",
     # Batch correction
     "plot_pool_pca",
+    "permanova_batch_effects",
+    "correct_ratio_by_factors",
+    "correct_ratio_by_irt",
     # PRM — plots
     "plot_library_dot_product_distribution",
     "plot_heavy_light_scatter",
