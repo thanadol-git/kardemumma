@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import statsmodels.formula.api as smf
+from sklearn.cluster import HDBSCAN
 from statsmodels.stats.anova import anova_lm
 
 logger = logging.getLogger(__name__)
@@ -268,6 +269,77 @@ def filter_peptide_counts(
         (peptide_counts_df["heavy_count"] > heavy_cutoff)
     )
     return peptide_counts_df.loc[mask].reset_index(drop=True)
+
+
+def cluster_abundant_peptides(
+    peptide_counts: pd.DataFrame,
+    min_cluster_size: int = 10,
+    min_samples: Optional[int] = None,
+) -> Tuple[pd.DataFrame, dict]:
+    """
+    Cluster peptides by their limiting detection count —
+    ``min(heavy_count, light_count)`` — with HDBSCAN, and flag the
+    most-abundant cluster as a data-driven alternative to a fixed count
+    cutoff (see :func:`filter_peptide_counts`).
+
+    A peptide's abundance is bottlenecked by whichever channel is
+    worse-detected, so clustering on that single score (rather than raw
+    ``(heavy_count, light_count)`` coordinates) correctly groups the whole
+    "both channels well-detected" band together even when one channel's
+    count is much more spread out than the other — a plain 2D HDBSCAN over
+    the raw coordinates tends to fracture that band into small noise
+    fragments instead of one cluster.
+
+    The non-noise cluster with the highest mean score is taken as the
+    "abundant" group. Points HDBSCAN labels as noise (-1) are never
+    considered abundant.
+
+    Args:
+        peptide_counts: DataFrame with ``heavy_count`` and ``light_count`` columns.
+        min_cluster_size: HDBSCAN ``min_cluster_size`` parameter.
+        min_samples: HDBSCAN ``min_samples`` parameter (defaults to ``min_cluster_size``).
+
+    Returns:
+        ``(clustered_df, cutoff)`` where *clustered_df* is *peptide_counts* with
+        added ``cluster`` and ``is_abundant`` columns, and *cutoff* is
+        ``{"heavy_count": ..., "light_count": ...}`` — the minimum counts observed
+        within the abundant cluster.
+    """
+    for col in ("heavy_count", "light_count"):
+        if col not in peptide_counts.columns:
+            raise KeyError(f"Column '{col}' not found in peptide_counts.")
+
+    score = peptide_counts[["heavy_count", "light_count"]].min(axis=1).to_numpy(dtype=float).reshape(-1, 1)
+    labels = HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples).fit_predict(score)
+
+    result = peptide_counts.copy()
+    result["cluster"] = labels
+    result["_score"] = score.ravel()
+
+    non_noise = result[result["cluster"] != -1]
+    if non_noise.empty:
+        raise ValueError(
+            "HDBSCAN found no clusters (all points labeled noise); try a smaller min_cluster_size."
+        )
+
+    cluster_scores = non_noise.groupby("cluster")["_score"].mean()
+    abundant_cluster = cluster_scores.idxmax()
+    result["is_abundant"] = result["cluster"] == abundant_cluster
+
+    # min(heavy, light) >= c  <=>  heavy >= c AND light >= c, so the same
+    # scalar threshold applies to both channels — using separate per-axis
+    # minima here would be inconsistent with how the cluster was formed.
+    c = int(result.loc[result["is_abundant"], "_score"].min())
+    result = result.drop(columns="_score")
+    cutoff = {"heavy_count": c, "light_count": c}
+
+    logger.info(
+        "HDBSCAN found %d cluster(s) (%d noise points); abundant cluster=%s, n=%d, cutoff=%s",
+        len(cluster_scores), int((result["cluster"] == -1).sum()),
+        abundant_cluster, int(result["is_abundant"].sum()), cutoff,
+    )
+
+    return result, cutoff
 
 
 # ---------------------------------------------------------------------------
@@ -902,6 +974,58 @@ def plot_heavy_light_scatter(peptide_counts: pd.DataFrame) -> None:
     plt.plot([min_val, max_val], [min_val, max_val], "r--", lw=1)
     plt.grid(True)
     plt.colorbar(sc, label="# Peptides at Point")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_heavy_light_clusters(clustered_df: pd.DataFrame) -> None:
+    """
+    Scatter plot of heavy vs. light peptide counts colored by HDBSCAN cluster,
+    with the most-abundant cluster highlighted and its data-driven cutoff
+    lines drawn.
+
+    Args:
+        clustered_df: Output of :func:`cluster_abundant_peptides` (must contain
+            ``heavy_count``, ``light_count``, ``cluster``, and ``is_abundant``).
+    """
+    for col in ("heavy_count", "light_count", "cluster", "is_abundant"):
+        if col not in clustered_df.columns:
+            raise KeyError(f"Column '{col}' not found; run cluster_abundant_peptides first.")
+
+    plt.figure(figsize=(8, 6))
+
+    noise = clustered_df[clustered_df["cluster"] == -1]
+    if not noise.empty:
+        plt.scatter(
+            noise["heavy_count"], noise["light_count"],
+            c="lightgray", s=30, alpha=0.6, label="noise",
+        )
+
+    other = clustered_df[(clustered_df["cluster"] != -1) & (~clustered_df["is_abundant"])]
+    if not other.empty:
+        plt.scatter(
+            other["heavy_count"], other["light_count"],
+            c=other["cluster"], cmap="tab20", s=40, alpha=0.7, label="other clusters",
+        )
+
+    abundant = clustered_df[clustered_df["is_abundant"]]
+    plt.scatter(
+        abundant["heavy_count"], abundant["light_count"],
+        c="crimson", s=60, edgecolors="k", linewidth=0.5, label=f"abundant (n={len(abundant)})",
+    )
+
+    if not abundant.empty:
+        # min(heavy, light) >= c defines the abundant cluster, so the same
+        # scalar cutoff applies to both axes.
+        c = abundant[["heavy_count", "light_count"]].min(axis=1).min()
+        plt.axvline(c, color="crimson", ls="--", lw=1)
+        plt.axhline(c, color="crimson", ls="--", lw=1)
+
+    plt.xlabel("Heavy Count")
+    plt.ylabel("Light Count")
+    plt.title("Heavy vs. Light Peptide Counts\n(HDBSCAN clusters, abundant cluster highlighted)")
+    plt.legend(loc="best", fontsize=8)
+    plt.grid(True)
     plt.tight_layout()
     plt.show()
 

@@ -26,6 +26,7 @@ from .prm import (
     # Quality Filtering
     filter_library_dot_product,
     filter_peptide_counts,
+    cluster_abundant_peptides,
     # Peptide Detection Summary
     summarise_peptide_counts,
     report_peptide_protein_summary,
@@ -49,6 +50,7 @@ from .prm import (
     # Plots
     plot_library_dot_product_distribution,
     plot_heavy_light_scatter,
+    plot_heavy_light_clusters,
     plot_peptide_counts,
     plot_pool_boxplot,
     plot_pool_heatmap,
@@ -126,6 +128,7 @@ __all__ = [
     # PRM — quality filtering
     "filter_library_dot_product",
     "filter_peptide_counts",
+    "cluster_abundant_peptides",
     # PRM — peptide detection
     "summarise_peptide_counts",
     "report_peptide_protein_summary",
@@ -158,6 +161,7 @@ __all__ = [
     # PRM — plots
     "plot_library_dot_product_distribution",
     "plot_heavy_light_scatter",
+    "plot_heavy_light_clusters",
     "plot_peptide_counts",
     "plot_pool_boxplot",
     "plot_pool_heatmap",
