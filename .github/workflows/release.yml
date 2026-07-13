@@ -143,5 +143,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create ${{ needs.details.outputs.tag_name }} dist/* \
-            --title ${{ needs.details.outputs.tag_name }} \
+            --title "kardemumma ${{ needs.details.outputs.tag_name }}" \
             --generate-notes
