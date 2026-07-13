@@ -26,6 +26,7 @@ from .prm import (
     # Quality Filtering
     filter_library_dot_product,
     filter_peptide_counts,
+    cluster_abundant_peptides,
     # Peptide Detection Summary
     summarise_peptide_counts,
     report_peptide_protein_summary,
@@ -49,6 +50,7 @@ from .prm import (
     # Plots
     plot_library_dot_product_distribution,
     plot_heavy_light_scatter,
+    plot_heavy_light_clusters,
     plot_peptide_counts,
     plot_pool_boxplot,
     plot_pool_heatmap,
@@ -72,6 +74,11 @@ from .batch_correct import (
     permanova_batch_effects,
     correct_ratio_by_factors,
     correct_ratio_by_irt,
+)
+from .downstream import (
+    DownStream,
+    enrichment_analysis,
+    plot_enrichment,
 )
 from .openswath import (
     import_openswath_file,
@@ -121,6 +128,7 @@ __all__ = [
     # PRM — quality filtering
     "filter_library_dot_product",
     "filter_peptide_counts",
+    "cluster_abundant_peptides",
     # PRM — peptide detection
     "summarise_peptide_counts",
     "report_peptide_protein_summary",
@@ -146,9 +154,14 @@ __all__ = [
     "permanova_batch_effects",
     "correct_ratio_by_factors",
     "correct_ratio_by_irt",
+    # Downstream analysis
+    "DownStream",
+    "enrichment_analysis",
+    "plot_enrichment",
     # PRM — plots
     "plot_library_dot_product_distribution",
     "plot_heavy_light_scatter",
+    "plot_heavy_light_clusters",
     "plot_peptide_counts",
     "plot_pool_boxplot",
     "plot_pool_heatmap",

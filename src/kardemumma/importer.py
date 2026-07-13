@@ -397,11 +397,11 @@ class MergeFiles:
 
     def select_pool_data(
         self,
-        col_sample: str = "characteristics[Sample]",
-        sample_value: str = "Pool",
+        label_col: str = "factor value[Sample]",
+        pool_label: str = "Pool",
     ) -> pd.DataFrame:
         """
-        Filter merged DataFrame to rows where *col_sample* equals *sample_value*.
+        Filter merged DataFrame to rows where *label_col* equals *pool_label*.
 
         Prints a summary of unique sample counts in each plate for the filtered data.
         """
@@ -419,10 +419,12 @@ class MergeFiles:
             else:
                 for plate, count in counts.items():
                     print(f"Plate {plate}: {count} unique comment[data file] names")
-        
+
         merged_df = self.merge_files()
+        if label_col not in merged_df.columns:
+            raise ValueError(f"Column '{label_col}' not found in merged DataFrame.")
         filtered = (
-            merged_df[merged_df[col_sample] == sample_value]
+            merged_df[merged_df[label_col] == pool_label]
             .sort_values(["Replicate", "Peptide", "Isotope Label Type"])
             .reset_index(drop=True)
         )
