@@ -21,6 +21,8 @@ dependencies = [
     "matplotlib",
     "seaborn",
     "statsmodels",
+    "scipy",
+    "beautifulsoup4",
     "sdrf-pipelines[ontology]",
     "matplotlib-venn",
     "scikit-learn",
