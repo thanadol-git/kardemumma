@@ -113,6 +113,10 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Keep only Python distributions for PyPI upload
+        run: |
+          find dist -maxdepth 1 -type f ! \( -name "*.whl" -o -name "*.tar.gz" \) -delete
+
       - name: Publish distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
