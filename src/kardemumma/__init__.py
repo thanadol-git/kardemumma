@@ -70,6 +70,8 @@ from .prm import (
 from .batch_correct import (
     plot_pool_pca,
     permanova_batch_effects,
+    correct_ratio_by_factors,
+    correct_ratio_by_irt,
 )
 from .openswath import (
     import_openswath_file,
@@ -142,6 +144,8 @@ __all__ = [
     # Batch correction
     "plot_pool_pca",
     "permanova_batch_effects",
+    "correct_ratio_by_factors",
+    "correct_ratio_by_irt",
     # PRM — plots
     "plot_library_dot_product_distribution",
     "plot_heavy_light_scatter",

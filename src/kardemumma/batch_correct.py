@@ -309,3 +309,123 @@ def _print_permanova_summary(df: pd.DataFrame, n_permutations: int) -> None:
             print(f"       {row['variable']}  ({row['n_groups']} groups, {row['n_samples']} samples)")
 
     print("=" * 60)
+
+
+def correct_ratio_by_factors(
+    df: pd.DataFrame,
+    factors: list[str],
+    col_ratio: str = "RatioLightToHeavy",
+) -> pd.DataFrame:
+    """
+    Correct peptide ratios for batch factors using per-peptide median centering.
+
+    Factors are applied sequentially in the order given (most significant first
+    is recommended). For each factor, the correction divides each ratio by its
+    peptide-level group median relative to the peptide-level overall median,
+    effectively removing the group-level shift while preserving within-group
+    biological variation.
+
+    Args:
+        df: DataFrame with ``Replicate``, ``Peptide Sequence``, *col_ratio*,
+            and all columns listed in *factors*.
+        factors: Ordered list of characteristics columns to correct for
+            (e.g. from ``permanova_batch_effects``, most significant first).
+        col_ratio: Column containing the light-to-heavy ratio.
+
+    Returns:
+        Copy of *df* with an additional column ``{col_ratio}_corrected``.
+    """
+    missing = [c for c in ["Peptide Sequence", col_ratio] + factors if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing required columns: {missing}")
+
+    out = df.copy()
+    corrected_col = f"{col_ratio}_corrected"
+    out[corrected_col] = pd.to_numeric(out[col_ratio], errors="coerce")
+
+    for factor in factors:
+        # Per-peptide overall median
+        peptide_overall = (
+            out.groupby("Peptide Sequence")[corrected_col]
+            .median()
+            .rename("_overall_median")
+        )
+        # Per-peptide per-group median
+        peptide_group = (
+            out.groupby(["Peptide Sequence", factor])[corrected_col]
+            .median()
+            .rename("_group_median")
+            .reset_index()
+        )
+        peptide_group = peptide_group.merge(
+            peptide_overall.reset_index(), on="Peptide Sequence"
+        )
+        # Correction factor: group_median / overall_median
+        peptide_group["_factor"] = peptide_group["_group_median"] / peptide_group["_overall_median"]
+
+        out = out.merge(
+            peptide_group[["Peptide Sequence", factor, "_factor"]],
+            on=["Peptide Sequence", factor],
+            how="left",
+        )
+        valid = out["_factor"] > 0
+        out.loc[valid, corrected_col] = out.loc[valid, corrected_col] / out.loc[valid, "_factor"]
+        out.drop(columns=["_factor"], inplace=True)
+
+        print(f"  Corrected for: {factor}")
+
+    print(f"\nCorrected ratios written to '{corrected_col}'.")
+    return out
+
+
+def correct_ratio_by_irt(
+    df: pd.DataFrame,
+    irt_peptides: list[str],
+    col_ratio: str = "RatioLightToHeavy",
+) -> pd.DataFrame:
+    """
+    Correct peptide ratios using iRT peptides as negative controls (RUV-style).
+
+    iRT peptides are synthetic standards unaffected by biology. Their per-replicate
+    median log-ratio deviation from the overall iRT median is used as an estimate
+    of technical noise, which is then subtracted from all peptides in that replicate.
+
+    Args:
+        df: DataFrame with ``Replicate``, ``Peptide Sequence``, and *col_ratio*.
+        irt_peptides: List of iRT peptide sequences from ``get_irt_peptides()``.
+        col_ratio: Column containing the light-to-heavy ratio.
+
+    Returns:
+        Copy of *df* with an additional column ``{col_ratio}_corrected``.
+    """
+    missing = [c for c in ["Replicate", "Peptide Sequence", col_ratio] if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing required columns: {missing}")
+
+    irt_df = df[df["Peptide Sequence"].isin(irt_peptides)].copy()
+    if irt_df.empty:
+        raise ValueError("None of the provided iRT peptides were found in df.")
+
+    n_found = irt_df["Peptide Sequence"].nunique()
+    print(f"Using {n_found} iRT peptides as negative controls.")
+
+    irt_df["_log_ratio"] = np.log(pd.to_numeric(irt_df[col_ratio], errors="coerce").clip(lower=1e-12))
+
+    # Per-replicate median log-ratio of iRT peptides
+    rep_irt_median = irt_df.groupby("Replicate")["_log_ratio"].median().rename("_rep_offset")
+
+    # Overall median log-ratio of iRT peptides across all replicates
+    global_irt_median = irt_df["_log_ratio"].median()
+
+    # Offset to subtract per replicate: how much each replicate deviates from global
+    rep_offset = (rep_irt_median - global_irt_median).rename("_offset")
+
+    out = df.copy()
+    corrected_col = f"{col_ratio}_corrected"
+    out["_log_ratio"] = np.log(pd.to_numeric(out[col_ratio], errors="coerce").clip(lower=1e-12))
+    out = out.join(rep_offset, on="Replicate")
+    out[corrected_col] = np.exp(out["_log_ratio"] - out["_offset"])
+    out.drop(columns=["_log_ratio", "_offset"], inplace=True)
+
+    print(f"Corrected ratios written to '{corrected_col}'.")
+    return out

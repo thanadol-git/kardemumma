@@ -228,6 +228,17 @@ class ImportSkylineFile:
         )
         print(f"File {self.file_path} is valid.")
         return df
+    
+    def irt_signals(self) -> pd.DataFrame:
+        """
+        Return a DataFrame with the iRT signals from function get_irt_peptides().
+        """
+        main_df = self.import_skyline_file()
+        irt_peptides = get_irt_peptides(main_df)
+        
+        df_irt = main_df[main_df["Peptide Sequence"].isin(irt_peptides)]
+        
+        return df_irt
 
     def suggest_qc_samples(self, df: Optional[pd.DataFrame] = None) -> List[str]:
         """
