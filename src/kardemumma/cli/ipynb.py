@@ -282,10 +282,10 @@ def main():
                         help="Notebook filename (default: ratio_analysis.ipynb)")
     parser.add_argument("--dotp", type=float, default=0.6, metavar="THRESHOLD",
                         help="Library dot product threshold (default: 0.6)")
-    parser.add_argument("--light-cutoff", type=int, default=700, metavar="N",
-                        help="Min light count per peptide (default: 700)")
-    parser.add_argument("--heavy-cutoff", type=int, default=700, metavar="N",
-                        help="Min heavy count per peptide (default: 700)")
+    parser.add_argument("--light-cutoff", type=int, default=0, metavar="N",
+                        help="Min light count per peptide (default: 0)")
+    parser.add_argument("--heavy-cutoff", type=int, default=0, metavar="N",
+                        help="Min heavy count per peptide (default: 0)")
     parser.add_argument("--pool-value", default="Pool", metavar="STR",
                         help="Value in characteristics[Sample] marking pool samples "
                              "(default: Pool)")
