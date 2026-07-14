@@ -88,6 +88,12 @@ You can install the dependencies and set up the environment using [Conda](https:
 
 ## To Dos
 
+### Version 0.1.3
+- [ ] Unit testing 
+- [ ] mzQC
+- [ ] pmultiqc
+- [ ] Logo banners
+
 ### Phase 1 — Python Package & PyPI Release (Version 0.x.x)
 
 **1. Code & API clean-up**
