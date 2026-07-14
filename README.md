@@ -26,6 +26,7 @@ You can install the dependencies and set up the environment using [Conda](https:
 2. Create the Conda environment using the `config.yml` file:
    ```bash
    conda env create -f environment.yml -p ./env
+   
    ```
 
    Alternatively, if you want to use a unique environment name:
@@ -56,8 +57,29 @@ You can install the dependencies and set up the environment using [Conda](https:
 ## Requirement
 
 ### To run the script
-- Result files 
-- [targeted-SDRF](https://github.com/bigbio/sdrf-templates/issues/44)
+- Result files exported from Skyline (`*.csv`) and a [targeted-SDRF](https://github.com/bigbio/sdrf-templates/issues/44) file (`.sdrf.tsv`) are required for analysis. Column names are validated in `src/kardemumma/importer.py`.
+
+  **Skyline CSV — required columns** (`ImportSkylineFile`, `_SKYLINE_EXPECTED_COLS`):
+
+  `Precursor`, `Replicate`, `File Name`, `Peptide Retention Time`, `Predicted Retention Time`, `Precursor Charge`, `Peptide Sequence`, `Peptide`, `Normalized Area`, `RatioLightToHeavy`, `Ratio Dot Product`, `Library Dot Product`, `Protein Name`
+
+  | Precursor | Replicate | File Name | Peptide Retention Time | Predicted Retention Time | Precursor Charge | Peptide Sequence | Peptide | Normalized Area | RatioLightToHeavy | Ratio Dot Product | Library Dot Product | Protein Name |
+  |---|---|---|---:|---:|---:|---|---|---:|---:|---:|---:|---|
+  | 547.7823++ (light) | Sample_01 | Sample_01.raw | 12.45 | 12.30 | 2 | LVNELTEFAK | LVNELTEFAK | 1240000 | 0.98 | 0.95 | 0.97 | sp\|P01023\|A2M |
+  | 547.7823++ (heavy) | Sample_01 | Sample_01.raw | 12.46 | 12.30 | 2 | LVNELTEFAK | LVNELTEF[K].AK | 1310000 | | | 0.96 | sp\|P01023\|A2M |
+  | 490.5796+++ (light) | Sample_02 | Sample_02.raw | 13.35 | 13.83 | 3 | ELDKYGVSDYHK | ELDKYGVSDYHK | 850000 | 1.05 | 0.94 | 0.92 | iRT_Tag |
+
+  **SDRF — required columns for merge** (`MergeFiles.merge_files`):
+
+  - `comment[data file]` (joined to Skyline `File Name`)
+  - all `characteristics[...]` columns present in the file
+  - optional: any `factor value[...]` columns (merged when present)
+
+  | source name | characteristics[plate] | characteristics[Sample] | comment[data file] | factor value[Sample] |
+  |---|---|---|---|---|
+  | PRM_20251218_MarthaReselection_Plate_9_A4 | Plate_9 | CHAPS | PRM_20251218_MarthaReselection_Plate_9_A4.raw | CHAPS |
+  | PRM_20251218_MarthaReselection_Plate_9_B4 | Plate_9 | CHAPS | PRM_20251218_MarthaReselection_Plate_9_B4.raw | CHAPS |
+  | PRM_20251218_MarthaReselection_Pool | Plate_9 | Pool | PRM_20251218_MarthaReselection_Pool.raw | Pool |
 
 ### Notes
 - All required dependencies will be installed via Conda and pip as specified in `environment.yml`.
