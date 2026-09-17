@@ -250,12 +250,18 @@ def filter_library_dot_product(
 
     df = df.loc[df[col] > threshold].copy()
     df = df[df["Normalized Area"].notna()]
-    return df.pivot_table(
+    
+    # Print out Isotope Label Type count 
+    print(df["Isotope Label Type"].value_counts())
+    
+    wide = df.pivot_table(
         index=["Replicate", "Protein Name", "Peptide"],
         columns="Isotope Label Type",
         values="Normalized Area",
         aggfunc="first",
-    ).reset_index()
+    )
+    wide = wide.reset_index()  # Moves "Isotope Label Type" from index to columns
+    return wide
 
 
 def filter_peptide_counts(
@@ -661,7 +667,7 @@ def plot_plate_conversion_factors(
         plot_df["Peptide Sequence"], categories=ordered_peptides, ordered=True
     )
     plt.figure(figsize=(10, 6))
-    sns.boxplot(
+    ax = sns.boxplot(
         x="Peptide Sequence",
         y="ratio_fit",
         hue=col_plate,
@@ -674,6 +680,8 @@ def plot_plate_conversion_factors(
     plt.ylabel("Ratio Fit")
     plt.xticks(rotation=90)
     plt.tight_layout()
+    # Place the legend at the bottom, horizontally
+    plt.legend(title=col_plate, loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=len(plot_df[col_plate].unique()), frameon=False)
     plt.show()
     return plt.gcf()
 
@@ -723,7 +731,7 @@ def get_absolute_conc(
     skyline_protein_col: str = 'Protein Name',
 ) -> pd.DataFrame:
     """
-    Combine qRePS table with skyline_merge_adj.
+    Combine qRePS table with skyline_merge_adj, using File Name (not Replicate) as the identifier for samples/files.
     """
     # Check for necessary columns in both dataframes
     if skyline_protein_col not in skyline_df.columns:
@@ -731,15 +739,18 @@ def get_absolute_conc(
     # Check if qRePS is in qreps_table
     if 'qRePS' not in qreps_table.columns:
         raise KeyError("Column 'qRePS' not found in qreps_table.")
+    # Check for File Name in skyline_df
+    if 'File Name' not in skyline_df.columns:
+        raise KeyError("Column 'File Name' not found in skyline_df.")
 
-    # Extract qRePS id from skyline_df by looking at the skyline_protein_col column and extract text starting with QR followed by digits
+    # Extract qRePS id from skyline_df from the skyline_protein_col column, extract text starting with QR followed by digits
     skyline_df['qRePS'] = skyline_df[skyline_protein_col].str.extract(r'(QR\d+)')
 
     # Merge skyline_df and qreps_table on 'qRePS'
     combined_df = pd.merge(skyline_df, qreps_table, on='qRePS', how='left')
 
-    # Check for required columns after merge
-    for col in ["RatioLightToHeavy", "Amount per well [pmol]", "Peptide Sequence", "Protein Name", "Replicate"]:
+    # Check for required columns after merge (replace Replicate with File Name)
+    for col in ["RatioLightToHeavy", "Amount per well [pmol]", "Peptide Sequence", "Protein Name", "File Name"]:
         if col not in combined_df.columns:
             raise KeyError(f"Column '{col}' not found in the merged DataFrame.")
 
@@ -748,14 +759,14 @@ def get_absolute_conc(
         combined_df["RatioLightToHeavy"] * combined_df["Amount per well [pmol]"]
     ).round(4)
 
-    # Select columns to export
-    export_cols = ["qRePS", "Peptide Sequence", "Protein Name", "Replicate", "Protein conc [pmol]"]
+    # Select columns to export (replace Replicate with File Name)
+    export_cols = ["qRePS", "Peptide Sequence", "Protein Name", "File Name", "Protein conc [pmol]"]
     combined_df = combined_df[export_cols]
 
-    # Pivot the combined dataframe to wide format
+    # Pivot the combined dataframe to wide format (columns=File Name)
     combined_df_wide = combined_df.pivot_table(
         index=["qRePS", "Peptide Sequence", "Protein Name"],
-        columns="Replicate",
+        columns="File Name",
         values="Protein conc [pmol]",
         aggfunc="first"
     )
@@ -770,11 +781,11 @@ def get_absolute_conc(
         n_qreps = len(idx.get_level_values('qRePS').unique())
         n_peptides = len(idx.get_level_values('Peptide Sequence').unique())
         n_proteins = len(idx.get_level_values('Protein Name').unique())
-        n_replicates = len(df.columns.unique())
+        n_files = len(df.columns.unique())
         print(f"Number of unique qRePS ids: {n_qreps}")
         print(f"Number of unique Peptide Sequences: {n_peptides}")
         print(f"Number of unique Protein Names: {n_proteins}")
-        print(f"Number of unique Replicates: {n_replicates}")
+        print(f"Number of unique File Names: {n_files}")
 
     _report_abs(combined_df_wide)
 
@@ -937,14 +948,31 @@ def summarize_prm(
 
 
 def plot_library_dot_product_distribution(df: pd.DataFrame) -> None:
-    """Histogram (+ KDE) of ``Library Dot Product``."""
+    """
+    Histogram (+ KDE) of ``Library Dot Product`` colored by ``Isotope Label Type``.
+    """
     col = "Library Dot Product"
+    color_col = "Isotope Label Type"
     if col not in df.columns:
         raise KeyError(f"Column '{col}' not found in DataFrame.")
+    if color_col not in df.columns:
+        raise KeyError(f"Column '{color_col}' not found in DataFrame.")
+
     plt.figure(figsize=(10, 6))
-    sns.histplot(df[col], bins=20, kde=True)
-    plt.title("Distribution of Library Dot Product")
+    # Loop through each isotop label type and plot each as a separate histogram
+    unique_types = df[color_col].dropna().unique()
+    for i, iso_type in enumerate(unique_types):
+        subset = df[df[color_col] == iso_type]
+        sns.histplot(
+            subset[col],
+            bins=20, kde=True,
+            label=str(iso_type),
+            alpha=0.5,
+            element="step"
+        )
+    plt.title("Distribution of Library Dot Product by Isotope Label Type")
     plt.xlabel("Library Dot Product")
+    plt.legend(title=color_col)
     plt.show()
 
 
