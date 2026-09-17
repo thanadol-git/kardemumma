@@ -430,14 +430,34 @@ class MergeFiles:
         print("Summary of samples per plate:")
         _summarize_samples_per_plate(filtered)
         return filtered
-    
+
     def mistmatched_samples(self) -> pd.DataFrame:
         """
-        Return a DataFrame with the mistmatched samples between Skyline and SDRF.
+        Report a DataFrame with file names that are present in only one of:
+        Skyline (File Name) or SDRF (comment[data file]). Excludes files that
+        are present in both.
+
+        Columns: Files, Skyline, SDRF, suggested date (parsed as 8 consecutive digits from Files).
         """
-        merged_df = self.merge_files()
-        mistmatched_samples = merged_df[merged_df["File Name"] != merged_df["comment[data file]"]]
-        print(f"Number of mistmatched samples: {len(mistmatched_samples)}")
-        print(mistmatched_samples)
-        return mistmatched_samples
-    
+        import re
+
+        skyline_names = set(self.skyline_df["File Name"].unique())
+        sdrf_names = set(self.sdrf_df["comment[data file]"].unique())
+        # Only keep files present in exactly one set
+        mismatched_files = sorted(skyline_names ^ sdrf_names)
+        # Extract the first occurrence of 8 consecutive digits from the filename, if present
+        suggested_dates = [
+            (re.search(r"\d{8}", f).group(0) if re.search(r"\d{8}", f) else "")
+            for f in mismatched_files
+        ]
+        result_df = pd.DataFrame({
+            "Files": mismatched_files,
+            "Skyline": [1 if f in skyline_names else 0 for f in mismatched_files],
+            "SDRF": [1 if f in sdrf_names else 0 for f in mismatched_files],
+            "suggested date": suggested_dates,
+        })
+        # Sort by Skyline column so all Skyline-only appear together
+        result_df = result_df.sort_values("Skyline", ascending=False).reset_index(drop=True)
+        print("Mismatch summary (Files present in ONLY Skyline or ONLY SDRF):")
+        print(result_df)
+        return result_df
