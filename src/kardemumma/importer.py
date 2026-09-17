@@ -330,11 +330,10 @@ class MergeFiles:
         not_in_sdrf = skyline_files - sdrf_files
         not_in_skyline = sdrf_files - skyline_files
 
-        print("Sample names in Skyline but not in SDRF:")
-        print(not_in_sdrf if not_in_sdrf else "  (none)")
+        print(f"Sample names in Skyline but not in SDRF ({len(not_in_sdrf)}).")
         print("-" * 40)
-        print("Sample names in SDRF but not in Skyline:")
-        print(not_in_skyline if not_in_skyline else "  (none)")
+        print(f"Sample names in SDRF but not in Skyline ({len(not_in_skyline)}).")
+   
 
     def __init__(
         self,
@@ -431,3 +430,14 @@ class MergeFiles:
         print("Summary of samples per plate:")
         _summarize_samples_per_plate(filtered)
         return filtered
+    
+    def mistmatched_samples(self) -> pd.DataFrame:
+        """
+        Return a DataFrame with the mistmatched samples between Skyline and SDRF.
+        """
+        merged_df = self.merge_files()
+        mistmatched_samples = merged_df[merged_df["File Name"] != merged_df["comment[data file]"]]
+        print(f"Number of mistmatched samples: {len(mistmatched_samples)}")
+        print(mistmatched_samples)
+        return mistmatched_samples
+    
