@@ -1,5 +1,6 @@
 # KARDEMUMMA
 
+[![PyPI version](https://img.shields.io/pypi/v/kardemumma.svg)](https://pypi.org/project/kardemumma/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22882804.svg)](https://doi.org/10.5281/zenodo.22882804)
 
 **KARDEMUMMA** stands for **K**ey **A**nalysis of **R**eproducible **D**ata for **E**fficient **M**onitoring in **U**nified **M**ass **S**pectrometry **M**ethods and **A**ssays.
