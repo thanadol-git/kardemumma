@@ -1,5 +1,7 @@
 # KARDEMUMMA
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22882804.svg)](https://doi.org/10.5281/zenodo.22882804)
+
 **KARDEMUMMA** stands for **K**ey **A**nalysis of **R**eproducible **D**ata for **E**fficient **M**onitoring in **U**nified **M**ass **S**pectrometry **M**ethods and **A**ssays.
 
 This repository contains the Python package for processing and quality-checking targeted mass spectrometry outputs (for example Skyline/OpenSWATH-style exports). The tool is built based on targeted proteomics assay at KTH Royal intitute of technology and Science for Life Laboratory (SciLifeLab), Sweden. The aim of this tool is to provide a simplified analysis pipeline of plasma proteomics as well as bridging research and clinical applications. 
