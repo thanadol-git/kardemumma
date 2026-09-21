@@ -84,6 +84,42 @@ You can install the dependencies and set up the environment using [Conda](https:
   | PRM_20251218_MarthaReselection_Plate_9_B4 | Plate_9 | CHAPS | PRM_20251218_MarthaReselection_Plate_9_B4.raw | CHAPS |
   | PRM_20251218_MarthaReselection_Pool | Plate_9 | Pool | PRM_20251218_MarthaReselection_Pool.raw | Pool |
 
+### CLI workflow
+
+With a Skyline CSV and SDRF in place, run the three-step pipeline:
+
+```bash
+# Step 1 — import, QC summary, and cutoff guidance
+kardemumma-preview \
+  --skyline path/to/skyline_export.csv \
+  --sdrf path/to/experiment.sdrf.tsv \
+  --output results/
+
+# Step 2 — apply filters, pool normalization, and batch correction
+kardemumma-cutoff \
+  --skyline path/to/skyline_export.csv \
+  --sdrf path/to/experiment.sdrf.tsv \
+  --output results/
+
+# Step 3 — absolute quantification and report plots (reads results/ from step 2)
+kardemumma-report \
+  --output results/ \
+  --sdrf path/to/experiment.sdrf.tsv
+```
+
+To generate a ratio-analysis Jupyter notebook instead, use `kardemumma-ipynb`:
+
+```bash
+kardemumma-ipynb \
+  --skyline path/to/skyline_export.csv \
+  --sdrf path/to/experiment.sdrf.tsv \
+  --output notebooks/ \
+  --group-a CHAPS \
+  --group-b Pool
+```
+
+Run any command with `--help` for optional parameters (e.g. `--dotp`, `--light-cutoff`, `--pool-value`).
+
 ### Notes
 - All required dependencies will be installed via Conda and pip as specified in `environment.yml`.
 - Python 3.10 is recommended.
