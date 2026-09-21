@@ -120,6 +120,34 @@ kardemumma-ipynb \
 
 Run any command with `--help` for optional parameters (e.g. `--dotp`, `--light-cutoff`, `--pool-value`).
 
+### Spiked-in targets (qRePS)
+
+Absolute quantification uses **qRePS** spiked-in protein standards from [ProteomEdge](https://proteomedge.com). The lot number is recorded in the SDRF column `comment[ProteomEdge]` (one unique value per experiment). kardemumma reads that column, then scrapes the public lot page for the target table and FASTA — no login required.
+
+**SDRF column** (`ImportSDRFFile.extract_qreps_lot_number` in `src/kardemumma/importer.py`):
+
+| comment[ProteomEdge] |
+|---|
+| 24001 |
+
+**Python example** — lot from SDRF → scrape ProteomEdge → absolute concentrations:
+
+```python
+import kardemumma as kdm
+
+sdrf = kdm.ImportSDRFFile("experiment.sdrf.tsv")
+lot = sdrf.extract_qreps_lot_number()          # reads comment[ProteomEdge]
+
+qreps_table = kdm.fetch_qreps_table(lot)       # scrape qRePS table (proteomedge.py)
+fasta_df = kdm.fetch_fasta(lot)                # scrape .fasta download link
+
+kdm.summarise_qRePs(lot)                       # print target counts from the lot page
+
+abs_df = kdm.get_absolute_conc(qreps_table, skyline_merge_adj)
+```
+
+`kardemumma-report` runs this flow automatically (step 3 of the CLI pipeline above).
+
 ### Notes
 - All required dependencies will be installed via Conda and pip as specified in `environment.yml`.
 - Python 3.10 is recommended.
