@@ -66,8 +66,25 @@ jobs:
             echo "The new version $NEW_VERSION is greater than the latest version $LATEST_VERSION on PyPI."
           fi
 
+  test:
+    needs: details
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install package with test dependencies
+        run: pip install -e ".[test]"
+
+      - name: Run tests
+        run: pytest
+
   setup_and_build:
-    needs: [details, check_pypi]
+    needs: [details, check_pypi, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
