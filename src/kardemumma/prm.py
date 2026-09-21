@@ -100,6 +100,23 @@ def _resolve_group_col(sdrf_data_file: pd.DataFrame, group_col: Optional[str]) -
     return factor_cols[-1]
 
 
+def _resolve_sdrf_file_key(sdrf_data_file: pd.DataFrame) -> str:
+    """
+    SDRF column that matches :func:`get_absolute_conc` wide-format column names.
+
+    ``get_absolute_conc`` pivots on Skyline ``File Name`` (typically ``*.raw``), which
+    aligns with ``comment[data file]`` in the SDRF, not ``source name``.
+    """
+    data_file_col = "comment[data file]"
+    if data_file_col in sdrf_data_file.columns:
+        return data_file_col
+    if "source name" not in sdrf_data_file.columns:
+        raise KeyError(
+            "Expected 'comment[data file]' or 'source name' in sdrf_data_file."
+        )
+    return "source name"
+
+
 _DISEASE_CATEGORY_PALETTE: dict[str, str] = {
     "Healthy": "#c9b28f",
     "Cardiovascular": "#ed936b",
@@ -1249,7 +1266,11 @@ def map_peptide_sequence(
     line_length: int = 30,
 ):
     """
-    Plot a protein sequence in blocks, highlighting detected peptide locations.
+    Plots for showing peptide-to-protein mapping.
+
+    Produces two plots:
+    1. Protein sequence as blocks, with highlighted detected peptide locations.
+    2. Coverage bar indicating which sequence regions are covered by detected peptides.
 
     Args:
         abs_df: Peptide concentration data (wide or long format from get_absolute_conc).
@@ -1282,7 +1303,9 @@ def map_peptide_sequence(
             raise ValueError(f"No rows found for Protein Name '{protein_name}'.")
         peptides = _get_col(abs_df_flat, 'Peptide Sequence')[protein_mask].unique()
     except Exception as e:
-        raise RuntimeError(f"Could not extract peptide sequences for '{protein_name}': {e}")
+        raise RuntimeError(
+            f"Could not extract peptide sequences for '{protein_name}': {e}"
+        )
 
     matching = fasta_file[fasta_file['id'] == protein_name]
     if matching.empty:
@@ -1299,14 +1322,19 @@ def map_peptide_sequence(
     for idx, pep in enumerate(peptides):
         start = sequence.find(pep)
         if start == -1:
-            print(f"Warning: peptide '{pep}' not found in sequence for '{protein_name}'.")
+            print(
+                f"Warning: peptide '{pep}' not found in sequence for '{protein_name}'."
+            )
             continue
         pep_indices[pep] = idx
-        pep_positions[start:start + len(pep)] = idx + 1
+        pep_positions[start : start + len(pep)] = idx + 1
 
+    # Plot 1: Block diagram, as originally implemented
     fig_height = max(n_lines * 1.3 + 1.5, 2.8)
     fig_width = min(1.3 * line_length, 28)
-    fig, axes = plt.subplots(n_lines, 1, figsize=(fig_width, fig_height), sharex=False, squeeze=False)
+    fig, axes = plt.subplots(
+        n_lines, 1, figsize=(fig_width, fig_height), sharex=False, squeeze=False
+    )
     fig.suptitle(str(protein_name), fontsize=18, y=1.0, weight='bold')
     colors = plt.cm.tab20.colors
 
@@ -1320,30 +1348,53 @@ def map_peptide_sequence(
         for i in range(line_length):
             if i < n_aa:
                 in_pep = pep_positions[start_idx + i]
-                ax.add_patch(plt.Rectangle(
-                    (i, 0), 1, 1,
-                    facecolor=colors[in_pep - 1] if in_pep else '#ffffff',
-                    edgecolor='black',
-                    lw=1.5 if in_pep else 0.7,
-                    alpha=0.7 if in_pep else 1.0,
-                    zorder=2 if in_pep else 1,
-                    linewidth=1.3,
-                ))
-                ax.text(i + 0.5, 0.5, seq_sub[i], ha='center', va='center',
-                        color='black', fontsize=16, fontfamily='monospace',
-                        weight='bold', zorder=4)
+                ax.add_patch(
+                    plt.Rectangle(
+                        (i, 0),
+                        1,
+                        1,
+                        facecolor=colors[in_pep - 1] if in_pep else '#ffffff',
+                        edgecolor='black',
+                        lw=1.5 if in_pep else 0.7,
+                        alpha=0.7 if in_pep else 1.0,
+                        zorder=2 if in_pep else 1,
+                        linewidth=1.3,
+                    )
+                )
+                ax.text(
+                    i + 0.5,
+                    0.5,
+                    seq_sub[i],
+                    ha='center',
+                    va='center',
+                    color='black',
+                    fontsize=16,
+                    fontfamily='monospace',
+                    weight='bold',
+                    zorder=4,
+                )
             else:
-                ax.add_patch(plt.Rectangle(
-                    (i, 0), 1, 1,
-                    facecolor='#f5f5f5', edgecolor='black',
-                    lw=0.6, alpha=1.0, zorder=1, linewidth=1.0,
-                ))
+                ax.add_patch(
+                    plt.Rectangle(
+                        (i, 0),
+                        1,
+                        1,
+                        facecolor='#f5f5f5',
+                        edgecolor='black',
+                        lw=0.6,
+                        alpha=1.0,
+                        zorder=1,
+                        linewidth=1.0,
+                    )
+                )
 
         ax.set_xlim(0, line_length)
         ax.set_ylim(0, 1.23)
         ax.set_yticks([])
         residue_ticks = list(range(0, line_length, 10))
-        xtick_labels = [str(start_idx + 1 + x) if x < n_aa else '' for x in residue_ticks]
+        xtick_labels = [
+            str(start_idx + 1 + x) if x < n_aa else '' for x in residue_ticks
+        ]
         ax.set_xticks([x + 0.5 for x in residue_ticks])
         ax.set_xticklabels(xtick_labels, fontsize=12)
         for spine in ['top', 'right', 'left']:
@@ -1351,16 +1402,79 @@ def map_peptide_sequence(
         ax.spines['bottom'].set_visible(True)
 
     if pep_indices:
-        legend_handles = [plt.Line2D([0], [0], color=colors[idx % len(colors)], lw=8)
-                          for idx in pep_indices.values()]
+        legend_handles = [
+            plt.Line2D([0], [0], color=colors[idx % len(colors)], lw=8)
+            for idx in pep_indices.values()
+        ]
         axes[-1, 0].legend(
-            legend_handles, list(pep_indices.keys()),
+            legend_handles,
+            list(pep_indices.keys()),
             loc='upper center',
             bbox_to_anchor=(0.5, -0.30 + (0.3 / fig_height)),
-            ncol=3, fontsize=11, frameon=False,
+            ncol=3,
+            fontsize=11,
+            frameon=False,
         )
     plt.tight_layout(h_pad=0.8, rect=[0, 0, 1, 0.98])
-    return fig
+
+    # Plot 2: Coverage bar, simple 1d highlight
+    cov_fig, cov_ax = plt.subplots(figsize=(max(7, min(seq_len // 5, 18)), 1.1))
+    cov_ax.set_title('Peptide Coverage', fontsize=14, weight='bold', y=1.2)
+    cov_ax.set_xlim(0, seq_len)
+    cov_ax.set_ylim(0, 1)
+    cov_ax.axis('off')
+
+    # Draw full protein bar
+    cov_ax.add_patch(
+        plt.Rectangle((0, 0.4), seq_len, 0.2, facecolor='#E0E0E0', edgecolor='black', lw=1.1)
+    )
+
+    # Overlay covered regions by detected peptides
+    cov_colors = [colors[idx % len(colors)] for idx in range(len(peptides))]
+    for i, pep in enumerate(peptides):
+        # Find all occurrences for peptides that may appear more than once
+        starts = []
+        s = 0
+        while True:
+            found = sequence.find(pep, s)
+            if found == -1:
+                break
+            starts.append(found)
+            s = found + 1
+        for start in starts:
+            cov_ax.add_patch(
+                plt.Rectangle(
+                    (start, 0.4),
+                    len(pep),
+                    0.2,
+                    facecolor=cov_colors[i],
+                    edgecolor='#202020',
+                    lw=2,
+                    zorder=2,
+                    alpha=0.8,
+                )
+            )
+
+    cov_ax.text(
+        0,
+        1.01,
+        f"{protein_name} (length={seq_len})",
+        va='bottom',
+        ha='left',
+        fontsize=12,
+        fontweight='bold',
+        fontfamily='monospace',
+        color='#2C3140',
+    )
+
+    ticks = list(range(0, seq_len + 1, 50)) if seq_len > 150 else list(range(0, seq_len + 1, 20))
+    cov_ax.set_xticks(ticks)
+    cov_ax.set_xticklabels([str(t + 1) for t in ticks], fontsize=11)
+    cov_ax.tick_params(axis='x', which='both', length=0)
+
+    plt.tight_layout()
+
+    return fig, cov_fig
 
 
 def plot_peptide_concentration_by_group(
@@ -1390,7 +1504,8 @@ def plot_peptide_concentration_by_group(
 
     plot_df = _build_concentration_plot_df(abs_df, sdrf_data_file, group_col, color_col)
 
-    unmapped = set(plot_df["Replicate"]) - set(sdrf_data_file["source name"])
+    file_key = _resolve_sdrf_file_key(sdrf_data_file)
+    unmapped = set(plot_df["Replicate"]) - set(sdrf_data_file[file_key])
     if unmapped:
         print(f"Unmapped replicates ({len(unmapped)}): {sorted(unmapped)}")
 
@@ -1674,7 +1789,8 @@ def plot_all_peptide_concentration_by_group(
     plot_df = _build_concentration_plot_df(abs_df, sdrf_data_file, group_col, color_col)
     plot_df = plot_df[plot_df[color_col].notna()]
 
-    unmapped = set(plot_df["Replicate"]) - set(sdrf_data_file["source name"])
+    file_key = _resolve_sdrf_file_key(sdrf_data_file)
+    unmapped = set(plot_df["Replicate"]) - set(sdrf_data_file[file_key])
     if unmapped:
         print(f"Unmapped replicates ({len(unmapped)}): {sorted(unmapped)}")
 
@@ -1767,7 +1883,8 @@ def plot_pca(
     coords = pca.fit_transform(X)
     var_explained = pca.explained_variance_ratio_
 
-    rep_meta = sdrf_data_file[["source name", color_col]].drop_duplicates().set_index("source name")
+    file_key = _resolve_sdrf_file_key(sdrf_data_file)
+    rep_meta = sdrf_data_file[[file_key, color_col]].drop_duplicates().set_index(file_key)
     pca_df = pd.DataFrame({"PC1": coords[:, 0], "PC2": coords[:, 1]}, index=pivot.index)
     pca_df[color_col] = rep_meta.reindex(pca_df.index)[color_col].values
 
@@ -1846,7 +1963,8 @@ def plot_umap(
         metric=metric, random_state=random_state,
     ).fit_transform(X)
 
-    rep_meta = sdrf_data_file[["source name", color_col]].drop_duplicates().set_index("source name")
+    file_key = _resolve_sdrf_file_key(sdrf_data_file)
+    rep_meta = sdrf_data_file[[file_key, color_col]].drop_duplicates().set_index(file_key)
     umap_df = pd.DataFrame({"UMAP1": embedding[:, 0], "UMAP2": embedding[:, 1]}, index=pivot.index)
     umap_df[color_col] = rep_meta.reindex(umap_df.index)[color_col].values
 
@@ -1891,7 +2009,8 @@ def plot_all_all(
     plot_df = _build_concentration_plot_df(abs_df, sdrf_data_file, group_col, color_col)
     plot_df = plot_df[plot_df[color_col].notna()]
 
-    unmapped = set(plot_df["Replicate"]) - set(sdrf_data_file["source name"])
+    file_key = _resolve_sdrf_file_key(sdrf_data_file)
+    unmapped = set(plot_df["Replicate"]) - set(sdrf_data_file[file_key])
     if unmapped:
         print(f"Unmapped replicates ({len(unmapped)}): {sorted(unmapped)}")
 
