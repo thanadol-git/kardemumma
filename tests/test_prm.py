@@ -12,8 +12,10 @@ import pytest
 from kardemumma.prm import (
     compute_cv,
     dot_product_summary,
+    filter_library_dot_product,
     flag_missing_values,
     retention_time_deviation,
+    summarise_peptide_counts,
     summarize_prm,
 )
 
@@ -62,6 +64,63 @@ def sample_df() -> pd.DataFrame:
             "Retention Time Calculator Score": [0.99] * 9,
         }
     )
+
+
+@pytest.fixture()
+def sample_long_df(sample_df) -> pd.DataFrame:
+    """Long-format PRM table with light/heavy rows for filter tests."""
+    heavy = sample_df.copy()
+    heavy["Precursor"] = heavy["Precursor"] + " (heavy)"
+    heavy["Isotope Label Type"] = "heavy"
+    light = sample_df.copy()
+    light["Isotope Label Type"] = "light"
+    return pd.concat([heavy, light], ignore_index=True)
+
+
+# ---------------------------------------------------------------------------
+# filter_library_dot_product
+# ---------------------------------------------------------------------------
+
+class TestFilterLibraryDotProduct:
+    def test_pivots_to_heavy_light_columns(self, sample_long_df):
+        result = filter_library_dot_product(sample_long_df, threshold=0.6)
+        assert list(result.columns) == [
+            "Replicate", "Protein Name", "Peptide", "heavy", "light",
+        ]
+        assert len(result) == 9
+
+    def test_coerces_string_normalized_area(self, sample_long_df):
+        df = sample_long_df.copy()
+        df["Normalized Area"] = df["Normalized Area"].astype(str)
+        result = filter_library_dot_product(df, threshold=0.6)
+        counts = summarise_peptide_counts(result)
+        assert not counts.empty
+
+    def test_single_channel_input_has_no_other_channel_column(self, sample_long_df):
+        light_only = sample_long_df[sample_long_df["Isotope Label Type"] == "light"]
+        result = filter_library_dot_product(light_only, threshold=0.6)
+        assert list(result.columns) == ["Replicate", "Protein Name", "Peptide", "light"]
+        assert "heavy" not in result.columns
+
+    def test_empty_result_when_no_rows_pass(self, sample_long_df):
+        result = filter_library_dot_product(sample_long_df, threshold=0.99)
+        assert result.empty
+
+    def test_rows_with_missing_normalized_area_are_dropped(self):
+        df = pd.DataFrame(
+            {
+                "Precursor": ["PEP_2", "PEP_2 (heavy)"],
+                "Replicate": ["R1", "R1"],
+                "Protein Name": ["ProtA", "ProtA"],
+                "Peptide": ["PEP", "PEP"],
+                "Isotope Label Type": ["light", "heavy"],
+                "Library Dot Product": [0.95, 0.95],
+                "Normalized Area": [pd.NA, pd.NA],
+                "Total Area": [1000.0, 2000.0],
+            }
+        )
+        result = filter_library_dot_product(df, threshold=0.6)
+        assert result.empty
 
 
 # ---------------------------------------------------------------------------
