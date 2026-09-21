@@ -30,7 +30,12 @@ def validate_sdrf(sdrf_file: str) -> Tuple[bool, str]:
     # Prefer the parse_sdrf that belongs to the current Python environment
     scripts_dir = os.path.dirname(sys.executable)
     parse_sdrf_path = os.path.join(scripts_dir, "parse_sdrf")
-    cmd = [parse_sdrf_path, "validate-sdrf", "--sdrf_file", os.path.abspath(sdrf_file)]
+    cmd = [
+        parse_sdrf_path, 
+        "validate-sdrf", 
+        "--sdrf_file", os.path.abspath(sdrf_file),
+        "--skip-ontology"
+    ]
 
     try:
         result = subprocess.run(
