@@ -729,9 +729,12 @@ def get_absolute_conc(
     qreps_table: pd.DataFrame,
     skyline_df: pd.DataFrame,
     skyline_protein_col: str = 'Protein Name',
+    ratio_cutoff_low: float = 10**-3,
+    ratio_cutoff_high: float = 10**3,
 ) -> pd.DataFrame:
     """
     Combine qRePS table with skyline_merge_adj, using File Name (not Replicate) as the identifier for samples/files.
+    Ratios below or above cutoffs will be set to np.nan.
     """
     # Check for necessary columns in both dataframes
     if skyline_protein_col not in skyline_df.columns:
@@ -743,16 +746,29 @@ def get_absolute_conc(
     if 'File Name' not in skyline_df.columns:
         raise KeyError("Column 'File Name' not found in skyline_df.")
 
-    # Extract qRePS id from skyline_df from the skyline_protein_col column, extract text starting with QR followed by digits
+    # Extract qRePS id from skyline_df from the skyline_protein_col column
+    skyline_df = skyline_df.copy()
     skyline_df['qRePS'] = skyline_df[skyline_protein_col].str.extract(r'(QR\d+)')
 
     # Merge skyline_df and qreps_table on 'qRePS'
     combined_df = pd.merge(skyline_df, qreps_table, on='qRePS', how='left')
 
-    # Check for required columns after merge (replace Replicate with File Name)
+    # Check for required columns after merge
     for col in ["RatioLightToHeavy", "Amount per well [pmol]", "Peptide Sequence", "Protein Name", "File Name"]:
         if col not in combined_df.columns:
             raise KeyError(f"Column '{col}' not found in the merged DataFrame.")
+
+    # Filter RatioLightToHeavy by cutoffs (set out of bounds to np.nan)
+    ratio = combined_df["RatioLightToHeavy"]
+    out_of_bounds = (ratio < ratio_cutoff_low) | (ratio > ratio_cutoff_high)
+    combined_df.loc[out_of_bounds, "RatioLightToHeavy"] = np.nan
+
+    # print out of bounds ratio
+    print(f"Number of out of bounds ratios: {out_of_bounds.sum()}")
+    print(f"Ratio cutoff low: {ratio_cutoff_low}")
+    print(f"Ratio cutoff high: {ratio_cutoff_high}")
+    # Print numbers of data ratio that has been removed
+    print(f"Number of data ratio that has been removed: {combined_df.loc[out_of_bounds, 'RatioLightToHeavy'].count()}")
 
     # Calculate absolute protein concentration [pmol]
     combined_df["Protein conc [pmol]"] = (
@@ -763,7 +779,7 @@ def get_absolute_conc(
     export_cols = ["qRePS", "Peptide Sequence", "Protein Name", "File Name", "Protein conc [pmol]"]
     combined_df = combined_df[export_cols]
 
-    # Pivot the combined dataframe to wide format (columns=File Name)
+    # Pivot to wide format (columns=File Name)
     combined_df_wide = combined_df.pivot_table(
         index=["qRePS", "Peptide Sequence", "Protein Name"],
         columns="File Name",
@@ -774,7 +790,6 @@ def get_absolute_conc(
     if combined_df_wide.empty:
         raise ValueError("Combined dataframe is empty. Please check the input data.")
 
-    # Report the counts of unique values in combined_df_wide for key columns
     def _report_abs(df: pd.DataFrame) -> None:
         idx = df.index
         # idx is a MultiIndex with levels: 'qRePS', 'Peptide Sequence', 'Protein Name'
