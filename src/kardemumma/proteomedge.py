@@ -52,6 +52,8 @@ def fetch_qreps_table(link_or_lot) -> pd.DataFrame:
     """
     Fetch the qRePS data table for a given lot number or full ProteomEdge lot URL.
 
+    Uses the direct CSV download from data.proteomedge.com.
+
     Args:
         link_or_lot: Lot number (as string/int) or the full lot URL.
 
@@ -59,24 +61,33 @@ def fetch_qreps_table(link_or_lot) -> pd.DataFrame:
         pd.DataFrame: DataFrame containing the qRePS data.
 
     Raises:
-        ValueError: If the qRePS table cannot be found at the specified page.
+        ValueError: If the CSV file cannot be found or loaded.
     """
     link_or_lot = _coerce_lot_arg(link_or_lot)
+    # Extract the lot number, whether given directly or as part of a URL
+    lot_number = extract_lot_number(link_or_lot)
 
-    if link_or_lot.startswith("http"):
-        url = link_or_lot.strip()
-    else:
-        lot_str = link_or_lot.strip().strip("/")
-        url = f"https://proteomedge.com/lotdata/{lot_str}/"
+    # The download URL format: https://data.proteomedge.com/download/<lot>/<lot>_qreps.csv
+    url = f"https://data.proteomedge.com/download/{lot_number}/{lot_number}_qreps.csv"
 
-    response = _get_with_retry(url, timeout=30)
+    try:
+        response = _get_with_retry(url, timeout=30)
+        response.raise_for_status()
+    except Exception as exc:
+        raise ValueError(
+            f"Could not retrieve qRePS CSV file from {url!r}: {exc}"
+        ) from exc
 
-    all_tables = pd.read_html(io.StringIO(response.text))
-    for table in all_tables:
-        normalized_columns = [str(col).strip().lower() for col in table.columns]
-        if "qreps" in normalized_columns and "amount per well [pmol]" in normalized_columns:
-            return table
-
+    # Read CSV into DataFrame
+    try:
+        df = pd.read_csv(io.StringIO(response.text))
+        if df.empty:
+            raise ValueError(f"Loaded qRePS CSV from {url!r} but it is empty.")
+        return df
+    except Exception as exc:
+        raise ValueError(
+            f"Failed to parse qRePS CSV from {url!r}: {exc}"
+        ) from exc
     raise ValueError("Could not find qRePS data table on the page.")
 
 def extract_lot_number(link_or_lot: str) -> str:
