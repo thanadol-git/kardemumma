@@ -205,36 +205,72 @@ class DownStream:
 
         df = de_df.copy()
         df["neg_log10_p"] = -np.log10(df[pval_col].clip(lower=1e-300))
-        sig = (df[pval_col] < p_threshold) & (df[log2fc_col].abs() >= fc_threshold)
+        sig = (
+            (df[pval_col] < p_threshold) &
+            (df[log2fc_col].abs() >= fc_threshold)
+        )
 
-        plt.figure(figsize=(8, 6))
-        plt.scatter(
-            df.loc[~sig, log2fc_col], df.loc[~sig, "neg_log10_p"],
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.scatter(
+            df.loc[~sig, log2fc_col],
+            df.loc[~sig, "neg_log10_p"],
             color="grey", alpha=0.5, s=20, label="Not significant",
         )
-        plt.scatter(
-            df.loc[sig, log2fc_col], df.loc[sig, "neg_log10_p"],
+        ax.scatter(
+            df.loc[sig, log2fc_col],
+            df.loc[sig, "neg_log10_p"],
             color="crimson", alpha=0.7, s=20, label="Significant",
         )
-        plt.axvline(fc_threshold, color="black", linestyle="--", linewidth=0.8)
-        plt.axvline(-fc_threshold, color="black", linestyle="--", linewidth=0.8)
-        plt.axhline(-np.log10(p_threshold), color="black", linestyle="--", linewidth=0.8)
+        ax.axvline(
+            fc_threshold, color="black", linestyle="--", linewidth=0.8
+        )
+        ax.axvline(
+            -fc_threshold, color="black", linestyle="--", linewidth=0.8
+        )
+        ax.axhline(
+            -np.log10(p_threshold), color="black",
+            linestyle="--", linewidth=0.8
+        )
 
         top_hits = df.loc[sig].sort_values(pval_col).head(label_top_n)
-        for _, row in top_hits.iterrows():
+        # Use angles and offsets to reduce overlap
+        angle_step = 360 / max(1, label_top_n)
+        radius = 50
+        for i, (_, row) in enumerate(top_hits.iterrows()):
             label = str(row[self.id_col])
             if "Protein Name" in df.columns:
                 label = f"{label}\n{row['Protein Name']}"
-            plt.text(row[log2fc_col], row["neg_log10_p"], label, fontsize=7)
+            theta = np.deg2rad(i * angle_step)
+            offset_x = int(np.cos(theta) * radius)
+            offset_y = int(np.sin(theta) * radius) + 25
+            # Stagger y offset a little further for even clearer separation
+            offset_y += (i % 3) * 10
+            ax.annotate(
+                label,
+                xy=(row[log2fc_col], row["neg_log10_p"]),
+                xycoords='data',
+                xytext=(offset_x, offset_y),
+                textcoords='offset points',
+                arrowprops=dict(arrowstyle="->", lw=0.7),
+                fontsize=7,
+                bbox=dict(
+                    boxstyle="round,pad=0.2", fc="white",
+                    alpha=0.7, lw=0
+                ),
+                ha='center'
+            )
 
-        plt.xlabel("log2 fold change")
-        plt.ylabel(f"-log10({pval_col})")
-        plt.title(f"Volcano plot: {self.group_a} vs {self.group_b} ({self.group_col})")
-        plt.legend()
-        plt.tight_layout()
-        fig = plt.gcf()
+        ax.set_xlabel("log2 fold change")
+        ax.set_ylabel(f"-log10({pval_col})")
+        ax.set_title(
+            f"Volcano plot: {self.group_a} vs "
+            f"{self.group_b} ({self.group_col})"
+        )
+        ax.legend()
+        fig.tight_layout()
         plt.close(fig)
         return fig
+
 
 
 # ---------------------------------------------------------------------------
