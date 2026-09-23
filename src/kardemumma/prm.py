@@ -784,8 +784,7 @@ def get_absolute_conc(
     print(f"Number of out of bounds ratios: {out_of_bounds.sum()}")
     print(f"Ratio cutoff low: {ratio_cutoff_low}")
     print(f"Ratio cutoff high: {ratio_cutoff_high}")
-    # Print numbers of data ratio that has been removed
-    print(f"Number of data ratio that has been removed: {combined_df.loc[out_of_bounds, 'RatioLightToHeavy'].count()}")
+
 
     # Calculate absolute protein concentration [pmol]
     combined_df["Protein conc [pmol]"] = (
