@@ -20,8 +20,6 @@ from kardemumma.proteomedge import (
     extract_lot_number,
     fetch_fasta,
     fetch_qreps_table,
-    load_qRePs,
-    load_qRePs_to_csv,
     save_fasta,
     summarise_qRePs,
 )
@@ -215,24 +213,24 @@ class TestFetchQrepsTable:
 # ---------------------------------------------------------------------------
 
 class TestFastaUrlForLot:
-    PAGE_HTML = '<html><body><a href="lot_23002.fasta">Download</a></body></html>'
+    META_TEXT = "product_name\tExample\nproduct_number\tDE17501\nnum_targets\t176\n"
     FASTA_TEXT = ">P1 desc one\nABC\n>P2 desc two\nXYZ\n"
 
     def test_returns_lot_number_and_fasta_text(self):
-        page_resp = MagicMock(text=self.PAGE_HTML)
+        meta_resp = MagicMock(text=self.META_TEXT)
         fasta_resp = MagicMock(text=self.FASTA_TEXT)
         with patch(
             "kardemumma.proteomedge._get_with_retry",
-            side_effect=[page_resp, fasta_resp],
+            side_effect=[meta_resp, fasta_resp],
         ):
             lot_number, fasta_text = _fasta_url_for_lot("23002")
         assert lot_number == "23002"
         assert fasta_text == self.FASTA_TEXT
 
-    def test_raises_when_no_fasta_link_found(self):
-        page_resp = MagicMock(text="<html><body>no link here</body></html>")
-        with patch("kardemumma.proteomedge._get_with_retry", return_value=page_resp):
-            with pytest.raises(ValueError, match="No .fasta link found"):
+    def test_raises_when_product_number_missing(self):
+        meta_resp = MagicMock(text="product_name\tExample\nnum_targets\t176\n")
+        with patch("kardemumma.proteomedge._get_with_retry", return_value=meta_resp):
+            with pytest.raises(ValueError, match="product_number"):
                 _fasta_url_for_lot("23002")
 
 
@@ -278,70 +276,28 @@ class TestSaveFasta:
 
 
 # ---------------------------------------------------------------------------
-# load_qRePs / load_qRePs_to_csv
-# ---------------------------------------------------------------------------
-
-class TestLoadQReps:
-    def test_saves_csv_with_expected_filename(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        df = pd.DataFrame({"Protein": ["ProtA"], "qReps": ["Q1"]})
-        mock_datetime = MagicMock()
-        mock_datetime.now.return_value.strftime.return_value = "20260101"
-        with patch(
-            "kardemumma.proteomedge.fetch_qreps_table", return_value=df
-        ), patch(
-            "kardemumma.proteomedge.extract_lot_number", return_value="23002"
-        ), patch("kardemumma.proteomedge.datetime", mock_datetime):
-            result_df, out_file = load_qRePs("23002")
-        assert out_file == "20260101_23002_qRePs.csv"
-        saved = pd.read_csv(tmp_path / out_file)
-        pd.testing.assert_frame_equal(saved, df)
-        pd.testing.assert_frame_equal(result_df, df)
-
-    def test_raises_when_lot_number_missing(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        df = pd.DataFrame({"Protein": ["ProtA"]})
-        with patch(
-            "kardemumma.proteomedge.fetch_qreps_table", return_value=df
-        ), patch("kardemumma.proteomedge.extract_lot_number", return_value=""):
-            with pytest.raises(ValueError, match="Could not determine lot number"):
-                load_qRePs("23002")
-
-
-class TestLoadQRepsToCsv:
-    def test_saves_csv_with_expected_filename(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        df = pd.DataFrame({"Protein": ["ProtA"], "qReps": ["Q1"]})
-        mock_datetime = MagicMock()
-        mock_datetime.now.return_value.strftime.return_value = "20260101"
-        with patch(
-            "kardemumma.proteomedge.fetch_qreps_table", return_value=df
-        ), patch(
-            "kardemumma.proteomedge.extract_lot_number", return_value="23002"
-        ), patch("kardemumma.proteomedge.datetime", mock_datetime):
-            result_df, out_file = load_qRePs_to_csv("23002")
-        assert out_file == "20260101_23002_qRePs.csv"
-        assert (tmp_path / out_file).exists()
-        pd.testing.assert_frame_equal(result_df, df)
-
-
-# ---------------------------------------------------------------------------
 # summarise_qRePs
 # ---------------------------------------------------------------------------
 
 class TestSummariseQReps:
     def test_prints_summary_for_successful_fetch(self, capsys):
         df = pd.DataFrame({"Protein": ["ProtA", "ProtA", "ProtB"]})
+        meta_resp = MagicMock()
+        meta_resp.text = (
+            "product_number\tAE1801\nnum_targets\t2\nlot_description\tExample desc\n"
+        )
         with patch(
             "kardemumma.proteomedge.fetch_qreps_table", return_value=df
         ), patch(
             "kardemumma.proteomedge.extract_lot_number", return_value="23002"
-        ):
+        ), patch("kardemumma.proteomedge.requests.get", return_value=meta_resp):
             summarise_qRePs("23002")
         out = capsys.readouterr().out
         assert "Lot Number: 23002" in out
-        assert "Number of Targets: 2" in out
-        assert "Number of qRePs: 3" in out
+        assert "Product Number: AE1801" in out
+        assert "Protein Targets: 2" in out
+        assert "qRePS Standards: 3" in out
+        assert "Description: Example desc" in out
 
     def test_prints_failure_message_and_returns_on_error(self, capsys):
         with patch(

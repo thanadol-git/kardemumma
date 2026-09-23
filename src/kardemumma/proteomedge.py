@@ -7,7 +7,6 @@ import time
 from datetime import datetime
 import requests
 import pandas as pd
-from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +51,8 @@ def fetch_qreps_table(link_or_lot) -> pd.DataFrame:
     """
     Fetch the qRePS data table for a given lot number or full ProteomEdge lot URL.
 
+    Uses the direct CSV download from data.proteomedge.com.
+
     Args:
         link_or_lot: Lot number (as string/int) or the full lot URL.
 
@@ -59,24 +60,33 @@ def fetch_qreps_table(link_or_lot) -> pd.DataFrame:
         pd.DataFrame: DataFrame containing the qRePS data.
 
     Raises:
-        ValueError: If the qRePS table cannot be found at the specified page.
+        ValueError: If the CSV file cannot be found or loaded.
     """
     link_or_lot = _coerce_lot_arg(link_or_lot)
+    # Extract the lot number, whether given directly or as part of a URL
+    lot_number = extract_lot_number(link_or_lot)
 
-    if link_or_lot.startswith("http"):
-        url = link_or_lot.strip()
-    else:
-        lot_str = link_or_lot.strip().strip("/")
-        url = f"https://proteomedge.com/lotdata/{lot_str}/"
+    # The download URL format: https://data.proteomedge.com/download/<lot>/<lot>_qreps.csv
+    url = f"https://data.proteomedge.com/download/{lot_number}/{lot_number}_qreps.csv"
 
-    response = _get_with_retry(url, timeout=30)
+    try:
+        response = _get_with_retry(url, timeout=30)
+        response.raise_for_status()
+    except Exception as exc:
+        raise ValueError(
+            f"Could not retrieve qRePS CSV file from {url!r}: {exc}"
+        ) from exc
 
-    all_tables = pd.read_html(io.StringIO(response.text))
-    for table in all_tables:
-        normalized_columns = [str(col).strip().lower() for col in table.columns]
-        if "qreps" in normalized_columns and "amount per well [pmol]" in normalized_columns:
-            return table
-
+    # Read CSV into DataFrame
+    try:
+        df = pd.read_csv(io.StringIO(response.text))
+        if df.empty:
+            raise ValueError(f"Loaded qRePS CSV from {url!r} but it is empty.")
+        return df
+    except Exception as exc:
+        raise ValueError(
+            f"Failed to parse qRePS CSV from {url!r}: {exc}"
+        ) from exc
     raise ValueError("Could not find qRePS data table on the page.")
 
 def extract_lot_number(link_or_lot: str) -> str:
@@ -128,11 +138,15 @@ def extract_lot_number(link_or_lot: str) -> str:
 
 def summarise_qRePs(lot_or_url: str) -> None:
     """
-    Summarise the qRePS data table for a given lot number or full ProteomEdge lot URL.
-    Prints summary information from the webpage, such as Product Name, Number of Targets, Number of qRePs, and Description.
+    Print a summary overview for a ProteomEdge qRePs lot:
+        - Lot Number
+        - Product Number
+        - Protein Targets
+        - qRePS Standards
+        - Description
 
     Args:
-        lot_or_url: Lot number as a string (e.g., '23002') or the full lot URL.
+        lot_or_url: Lot number as a string (e.g., "23002") or the full lot URL.
 
     Returns:
         None
@@ -144,36 +158,46 @@ def summarise_qRePs(lot_or_url: str) -> None:
         return
 
     lot_number = extract_lot_number(lot_or_url)
+    product_number = None
+    n_targets = None
+    description = None
 
-    product_name = None
-    # Override the description with the known expected value.
-    description = (
-        "Protein standards for MS-based quantitative proteomics of "
-        "apoliproteins in human plasma"
-    )
+    # Try to fetch meta-data file if possible (for Product Number, #Targets, Description)
+    import requests
 
-    n_targets = len(df["Protein"].unique()) if "Protein" in df.columns else None
-    n_qreps = len(df)  # each row is likely one qReP
+    try:
+        meta_url = (
+            f"https://data.proteomedge.com/download/{lot_number}/{lot_number}_metadata.tsv"
+        )
+        resp = requests.get(meta_url, timeout=30)
+        resp.raise_for_status()
+        lines = resp.text.splitlines()
+        meta = dict(
+            (row[0], row[1])
+            for row in (line.split("\t", 1) for line in lines if "\t" in line)
+        )
+        product_number = meta.get("product_number")
+        meta_n_targets = meta.get("num_targets")
+        description = meta.get("lot_description")
+        if meta_n_targets:
+            try:
+                n_targets = int(meta_n_targets)
+            except Exception:
+                n_targets = meta_n_targets
+    except Exception:
+        pass
+
+    if n_targets is None and "Protein" in df.columns:
+        n_targets = len(df["Protein"].unique())
+
+    n_qreps = len(df)
 
     print("\n--- qRePS Summary ---")
-    if product_name:
-        print(f"Product Name: {product_name}")
-    else:
-        print("Product Name: [Not found]")
-
     print(f"Lot Number: {lot_number}")
-
-    if n_targets is not None:
-        print(f"Number of Targets: {n_targets}")
-    else:
-        print("Number of Targets: [Unknown]")
-
-    print(f"Number of qRePs: {n_qreps}")
-
-    if description:
-        print(f"\nDescription: {description}\n")
-    else:
-        print("\nDescription: [Not found]\n")
+    print(f"Product Number: {product_number if product_number else '[Not found]'}")
+    print(f"Protein Targets: {n_targets if n_targets is not None else '[Unknown]'}")
+    print(f"qRePS Standards: {n_qreps}")
+    print(f"Description: {description if description else '[Not found]'}")
 
 def _is_url(s: str) -> bool:
     return bool(re.match(r'^(https?:\/\/|www\.)', s.strip()))
@@ -218,32 +242,47 @@ def _parse_fasta(text: str) -> pd.DataFrame:
 
 def _fasta_url_for_lot(link_or_lot: str) -> tuple[str, str]:
     """
-    Return ``(lot_number, fasta_text)`` by scraping the ProteomEdge lot page.
-    Raises ``ValueError`` if no ``.fasta`` link is found.
-    """
-    from urllib.parse import urljoin
+    Return ``(lot_number, fasta_text)`` for a ProteomEdge lot.
 
+    The lot page builds its FASTA download link client-side, keyed by the
+    lot's *product number* (not the lot number), from a metadata TSV. So
+    this fetches that metadata directly from data.proteomedge.com instead
+    of scraping the rendered lot page (which never contains a static link).
+    """
     link_or_lot = _coerce_lot_arg(link_or_lot)
     lot_number = extract_lot_number(link_or_lot)
-    page_url = (
-        link_or_lot if _is_url(link_or_lot)
-        else f"https://proteomedge.com/lotdata/{lot_number}/"
+
+    metadata_url = f"https://data.proteomedge.com/download/{lot_number}/{lot_number}_metadata.tsv"
+    try:
+        meta_resp = _get_with_retry(metadata_url, timeout=30)
+    except Exception as exc:
+        raise ValueError(
+            f"Could not retrieve lot metadata from {metadata_url!r}: {exc}"
+        ) from exc
+
+    product_number = None
+    for line in meta_resp.text.splitlines():
+        key, _, value = line.partition("\t")
+        if key.strip() == "product_number":
+            product_number = value.strip()
+            break
+
+    if not product_number:
+        raise ValueError(
+            f"Could not find 'product_number' in lot metadata: {metadata_url!r}"
+        )
+
+    fasta_url = (
+        f"https://data.proteomedge.com/download/{product_number}/"
+        f"{product_number}_sequences.fasta"
     )
-    if not page_url.startswith("http"):
-        page_url = "https://" + page_url
+    try:
+        fasta_resp = _get_with_retry(fasta_url, timeout=30)
+    except Exception as exc:
+        raise ValueError(
+            f"Could not retrieve FASTA file from {fasta_url!r}: {exc}"
+        ) from exc
 
-    page = _get_with_retry(page_url, timeout=30)
-    soup = BeautifulSoup(page.text, "lxml")
-
-    fasta_tag = soup.find("a", href=re.compile(r"\.fasta", re.I))
-    if not fasta_tag:
-        raise ValueError(f"No .fasta link found on page: {page_url}")
-
-    fasta_href = fasta_tag["href"]
-    if not fasta_href.startswith("http"):
-        fasta_href = urljoin(page_url, fasta_href)
-
-    fasta_resp = _get_with_retry(fasta_href, timeout=30)
     return lot_number, fasta_resp.text
 
 
@@ -251,8 +290,8 @@ def fetch_fasta(link_or_lot: str) -> pd.DataFrame:
     """
     Fetch the FASTA file for a ProteomEdge lot and return it as a DataFrame.
 
-    Scrapes the lot page to locate the ``.fasta`` download link, downloads it,
-    and parses it into a tidy table.
+    Uses the direct downloads from data.proteomedge.com: the lot's metadata
+    TSV (for its product number), then that product's FASTA file.
 
     Args:
         link_or_lot: Lot number (e.g. ``'23002'``) or full lot URL.
@@ -262,11 +301,11 @@ def fetch_fasta(link_or_lot: str) -> pd.DataFrame:
         one row per FASTA entry.
 
     Raises:
-        ValueError: If no ``.fasta`` link is found on the lot page.
+        ValueError: If the lot metadata or FASTA file cannot be retrieved.
         requests.HTTPError: If any HTTP request fails.
     """
     _, fasta_text = _fasta_url_for_lot(link_or_lot)
-    
+
     df = _parse_fasta(fasta_text)
     return df[["id", "sequence"]]
 
@@ -293,43 +332,3 @@ def save_fasta(link_or_lot: str, out_file: str | None = None) -> tuple[pd.DataFr
         fh.write(fasta_text)
     return _parse_fasta(fasta_text), out_file
 
-
-def load_qRePs(link_or_lot: str) -> tuple[pd.DataFrame, str]:
-    """
-    Load the qRePS data table for a given lot number or full ProteomEdge lot URL.
-
-    Args:
-        link_or_lot: Lot number as a string (e.g., '23002') or the full lot URL.
-
-    Returns:
-        pd.DataFrame: DataFrame containing the qRePS data.
-        str: The filename of the saved CSV file.
-    """
-    df = fetch_qreps_table(link_or_lot)
-    lot_number = extract_lot_number(link_or_lot)
-    if not lot_number:
-        raise ValueError("Could not determine lot number for filename.")
-    today_str = datetime.now().strftime("%Y%m%d")
-    out_file = f"{today_str}_{lot_number}_qRePs.csv"
-    df.to_csv(out_file, index=False)
-    return df, out_file 
-
-def load_qRePs_to_csv(link_or_lot: str) -> tuple[pd.DataFrame, str]:
-    """
-    Load the qRePS data table for a given lot number or full ProteomEdge lot URL and save it to a csv file.
-
-    Args:
-        link_or_lot: Lot number as a string (e.g., '23002') or the full lot URL.
-
-    Returns:
-        pd.DataFrame: DataFrame containing the qRePS data.
-        str: The filename of the saved csv file.
-    """
-    df = fetch_qreps_table(link_or_lot)
-    lot_number = extract_lot_number(link_or_lot)
-    if not lot_number:
-        raise ValueError("Could not determine lot number for filename.")
-    today_str = datetime.now().strftime("%Y%m%d")
-    out_file = f"{today_str}_{lot_number}_qRePs.csv"
-    df.to_csv(out_file, index=False)
-    return df, out_file 
