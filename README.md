@@ -155,11 +155,11 @@ abs_df = kdm.get_absolute_conc(qreps_table, skyline_merge_adj)
 
 ## To Dos
 
-### Version 0.1.3
-- [ ] Unit testing 
+### Future
 - [ ] mzQC
 - [ ] pmultiqc
 - [ ] Logo banners
+- [ ] Check LOD/LOQ
 
 ### Phase 1 — Python Package & PyPI Release (Version 0.x.x)
 
