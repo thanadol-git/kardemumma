@@ -7,7 +7,6 @@ import time
 from datetime import datetime
 import requests
 import pandas as pd
-from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -229,32 +228,47 @@ def _parse_fasta(text: str) -> pd.DataFrame:
 
 def _fasta_url_for_lot(link_or_lot: str) -> tuple[str, str]:
     """
-    Return ``(lot_number, fasta_text)`` by scraping the ProteomEdge lot page.
-    Raises ``ValueError`` if no ``.fasta`` link is found.
-    """
-    from urllib.parse import urljoin
+    Return ``(lot_number, fasta_text)`` for a ProteomEdge lot.
 
+    The lot page builds its FASTA download link client-side, keyed by the
+    lot's *product number* (not the lot number), from a metadata TSV. So
+    this fetches that metadata directly from data.proteomedge.com instead
+    of scraping the rendered lot page (which never contains a static link).
+    """
     link_or_lot = _coerce_lot_arg(link_or_lot)
     lot_number = extract_lot_number(link_or_lot)
-    page_url = (
-        link_or_lot if _is_url(link_or_lot)
-        else f"https://proteomedge.com/lotdata/{lot_number}/"
+
+    metadata_url = f"https://data.proteomedge.com/download/{lot_number}/{lot_number}_metadata.tsv"
+    try:
+        meta_resp = _get_with_retry(metadata_url, timeout=30)
+    except Exception as exc:
+        raise ValueError(
+            f"Could not retrieve lot metadata from {metadata_url!r}: {exc}"
+        ) from exc
+
+    product_number = None
+    for line in meta_resp.text.splitlines():
+        key, _, value = line.partition("\t")
+        if key.strip() == "product_number":
+            product_number = value.strip()
+            break
+
+    if not product_number:
+        raise ValueError(
+            f"Could not find 'product_number' in lot metadata: {metadata_url!r}"
+        )
+
+    fasta_url = (
+        f"https://data.proteomedge.com/download/{product_number}/"
+        f"{product_number}_sequences.fasta"
     )
-    if not page_url.startswith("http"):
-        page_url = "https://" + page_url
+    try:
+        fasta_resp = _get_with_retry(fasta_url, timeout=30)
+    except Exception as exc:
+        raise ValueError(
+            f"Could not retrieve FASTA file from {fasta_url!r}: {exc}"
+        ) from exc
 
-    page = _get_with_retry(page_url, timeout=30)
-    soup = BeautifulSoup(page.text, "lxml")
-
-    fasta_tag = soup.find("a", href=re.compile(r"\.fasta", re.I))
-    if not fasta_tag:
-        raise ValueError(f"No .fasta link found on page: {page_url}")
-
-    fasta_href = fasta_tag["href"]
-    if not fasta_href.startswith("http"):
-        fasta_href = urljoin(page_url, fasta_href)
-
-    fasta_resp = _get_with_retry(fasta_href, timeout=30)
     return lot_number, fasta_resp.text
 
 
@@ -262,8 +276,8 @@ def fetch_fasta(link_or_lot: str) -> pd.DataFrame:
     """
     Fetch the FASTA file for a ProteomEdge lot and return it as a DataFrame.
 
-    Scrapes the lot page to locate the ``.fasta`` download link, downloads it,
-    and parses it into a tidy table.
+    Uses the direct downloads from data.proteomedge.com: the lot's metadata
+    TSV (for its product number), then that product's FASTA file.
 
     Args:
         link_or_lot: Lot number (e.g. ``'23002'``) or full lot URL.
@@ -273,11 +287,11 @@ def fetch_fasta(link_or_lot: str) -> pd.DataFrame:
         one row per FASTA entry.
 
     Raises:
-        ValueError: If no ``.fasta`` link is found on the lot page.
+        ValueError: If the lot metadata or FASTA file cannot be retrieved.
         requests.HTTPError: If any HTTP request fails.
     """
     _, fasta_text = _fasta_url_for_lot(link_or_lot)
-    
+
     df = _parse_fasta(fasta_text)
     return df[["id", "sequence"]]
 

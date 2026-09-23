@@ -95,8 +95,6 @@ from .proteomedge import (
     fetch_qreps_table,
     extract_lot_number,
     summarise_qRePs,
-    load_qRePs,
-    load_qRePs_to_csv,
     fetch_fasta,
     save_fasta,
 )
@@ -193,8 +191,6 @@ __all__ = [
     "fetch_qreps_table",
     "extract_lot_number",
     "summarise_qRePs",
-    "load_qRePs",
-    "load_qRePs_to_csv",
     "fetch_fasta",
     "save_fasta",
     # UniProt
