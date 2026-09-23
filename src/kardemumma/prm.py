@@ -104,17 +104,27 @@ def _resolve_sdrf_file_key(sdrf_data_file: pd.DataFrame) -> str:
     """
     SDRF column that matches :func:`get_absolute_conc` wide-format column names.
 
-    ``get_absolute_conc`` pivots on Skyline ``File Name`` (typically ``*.raw``), which
-    aligns with ``comment[data file]`` in the SDRF, not ``source name``.
+    ``get_absolute_conc`` pivots on Skyline ``File Name`` (typically a raw or mzML file),
+    which aligns with ``comment[data file]`` in the SDRF, not ``source name``.
+    This function robustly detects if the relevant column contains file names ending in
+    .raw, .RAW, or .mzML (case insensitive), and returns the column name.
     """
     data_file_col = "comment[data file]"
     if data_file_col in sdrf_data_file.columns:
-        return data_file_col
-    if "source name" not in sdrf_data_file.columns:
-        raise KeyError(
-            "Expected 'comment[data file]' or 'source name' in sdrf_data_file."
-        )
-    return "source name"
+        col_values = sdrf_data_file[data_file_col].dropna().astype(str)
+        file_exts = (".raw", ".mzml")
+        if any(
+            str(val).lower().endswith(ext)
+            for val in col_values
+            for ext in file_exts
+        ):
+            return data_file_col
+    # Fallback: look for "source name" if present
+    if "source name" in sdrf_data_file.columns:
+        return "source name"
+    raise KeyError(
+        "Expected 'comment[data file]' (with .raw/.mzML/.RAW) or 'source name' in sdrf_data_file."
+    )
 
 
 _DISEASE_CATEGORY_PALETTE: dict[str, str] = {
@@ -144,10 +154,11 @@ def _build_concentration_plot_df(
         )
         .dropna(subset=["Protein conc [pmol]"])
     )
-    merge_cols = list(dict.fromkeys(["source name", group_col, color_col]))
+    file_key = _resolve_sdrf_file_key(sdrf_data_file)
+    merge_cols = list(dict.fromkeys([file_key, group_col, color_col]))
     return long_df.merge(
         sdrf_data_file[merge_cols].drop_duplicates(),
-        left_on="Replicate", right_on="source name", how="left",
+        left_on="Replicate", right_on=file_key, how="left",
     )
 
 
