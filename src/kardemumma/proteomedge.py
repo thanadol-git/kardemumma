@@ -138,11 +138,15 @@ def extract_lot_number(link_or_lot: str) -> str:
 
 def summarise_qRePs(lot_or_url: str) -> None:
     """
-    Summarise the qRePS data table for a given lot number or full ProteomEdge lot URL.
-    Prints summary information from the webpage, such as Product Name, Number of Targets, Number of qRePs, and Description.
+    Print a summary overview for a ProteomEdge qRePs lot:
+        - Lot Number
+        - Product Number
+        - Protein Targets
+        - qRePS Standards
+        - Description
 
     Args:
-        lot_or_url: Lot number as a string (e.g., '23002') or the full lot URL.
+        lot_or_url: Lot number as a string (e.g., "23002") or the full lot URL.
 
     Returns:
         None
@@ -154,36 +158,46 @@ def summarise_qRePs(lot_or_url: str) -> None:
         return
 
     lot_number = extract_lot_number(lot_or_url)
+    product_number = None
+    n_targets = None
+    description = None
 
-    product_name = None
-    # Override the description with the known expected value.
-    description = (
-        "Protein standards for MS-based quantitative proteomics of "
-        "apoliproteins in human plasma"
-    )
+    # Try to fetch meta-data file if possible (for Product Number, #Targets, Description)
+    import requests
 
-    n_targets = len(df["Protein"].unique()) if "Protein" in df.columns else None
-    n_qreps = len(df)  # each row is likely one qReP
+    try:
+        meta_url = (
+            f"https://data.proteomedge.com/download/{lot_number}/{lot_number}_metadata.tsv"
+        )
+        resp = requests.get(meta_url, timeout=30)
+        resp.raise_for_status()
+        lines = resp.text.splitlines()
+        meta = dict(
+            (row[0], row[1])
+            for row in (line.split("\t", 1) for line in lines if "\t" in line)
+        )
+        product_number = meta.get("product_number")
+        meta_n_targets = meta.get("num_targets")
+        description = meta.get("lot_description")
+        if meta_n_targets:
+            try:
+                n_targets = int(meta_n_targets)
+            except Exception:
+                n_targets = meta_n_targets
+    except Exception:
+        pass
+
+    if n_targets is None and "Protein" in df.columns:
+        n_targets = len(df["Protein"].unique())
+
+    n_qreps = len(df)
 
     print("\n--- qRePS Summary ---")
-    if product_name:
-        print(f"Product Name: {product_name}")
-    else:
-        print("Product Name: [Not found]")
-
     print(f"Lot Number: {lot_number}")
-
-    if n_targets is not None:
-        print(f"Number of Targets: {n_targets}")
-    else:
-        print("Number of Targets: [Unknown]")
-
-    print(f"Number of qRePs: {n_qreps}")
-
-    if description:
-        print(f"\nDescription: {description}\n")
-    else:
-        print("\nDescription: [Not found]\n")
+    print(f"Product Number: {product_number if product_number else '[Not found]'}")
+    print(f"Protein Targets: {n_targets if n_targets is not None else '[Unknown]'}")
+    print(f"qRePS Standards: {n_qreps}")
+    print(f"Description: {description if description else '[Not found]'}")
 
 def _is_url(s: str) -> bool:
     return bool(re.match(r'^(https?:\/\/|www\.)', s.strip()))

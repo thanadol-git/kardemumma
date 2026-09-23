@@ -282,16 +282,22 @@ class TestSaveFasta:
 class TestSummariseQReps:
     def test_prints_summary_for_successful_fetch(self, capsys):
         df = pd.DataFrame({"Protein": ["ProtA", "ProtA", "ProtB"]})
+        meta_resp = MagicMock()
+        meta_resp.text = (
+            "product_number\tAE1801\nnum_targets\t2\nlot_description\tExample desc\n"
+        )
         with patch(
             "kardemumma.proteomedge.fetch_qreps_table", return_value=df
         ), patch(
             "kardemumma.proteomedge.extract_lot_number", return_value="23002"
-        ):
+        ), patch("kardemumma.proteomedge.requests.get", return_value=meta_resp):
             summarise_qRePs("23002")
         out = capsys.readouterr().out
         assert "Lot Number: 23002" in out
-        assert "Number of Targets: 2" in out
-        assert "Number of qRePs: 3" in out
+        assert "Product Number: AE1801" in out
+        assert "Protein Targets: 2" in out
+        assert "qRePS Standards: 3" in out
+        assert "Description: Example desc" in out
 
     def test_prints_failure_message_and_returns_on_error(self, capsys):
         with patch(
