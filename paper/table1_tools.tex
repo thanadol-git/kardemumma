@@ -1,0 +1,31 @@
+\begin{table}
+\caption{kardemumma tools and libraries: input, operations, and output.}
+\label{tab:kardemumma-tools}
+\begin{tabular}{llp{3.5cm}p{4.5cm}p{3.5cm}}
+\toprule
+Category & Tool & Input & Operations & Output \\
+\midrule
+CLI & kardemumma-preview & Skyline CSV; SDRF `.tsv`; optional `--dotp` threshold & Import and validate files; detect QC samples; filter by library dot product; summarise peptide/protein counts; plot dot-product distribution and heavy/light scatter & `report\_summary.txt`, `skyline\_raw.csv`, `sdrf.csv`, `peptide\_counts\_raw.csv`, `qc\_samples.txt`, `dot\_product\_distribution.pdf`, `heavy\_light\_scatter.pdf` \\
+CLI & kardemumma-cutoff & Skyline CSV; SDRF `.tsv`; cutoffs (`--dotp`, `--light-cutoff`, `--heavy-cutoff`, `--pool-value`, etc.) & QC removal; dot-product filter; peptide count filtering; merge Skyline with SDRF; pool CV analysis; select normalization peptides; compute plate conversion factors; batch-correct ratios by plate & `skyline\_merge\_adj.csv`, `conversion\_factors.csv`, `interplate\_cv.csv`, pool/CV PDFs, `cutoff\_params.json` \\
+CLI & kardemumma-report & Output directory from cutoff (contains `skyline\_merge\_adj.csv`); SDRF `.tsv` (qRePS lot in `comment[ProteomEdge]`) & Fetch qRePS table and FASTA from ProteomEdge; compute absolute protein concentrations; generate concentration, median, PCA, and UMAP plots & `qreps\_table.csv`, `fasta.csv`, `abs\_df.csv`, `protein\_concentrations.pdf`, `protein\_median\_concentrations.pdf`, `pca.pdf`, `umap.pdf` \\
+CLI & kardemumma-ipynb & Skyline CSV; SDRF `.tsv`; `--group-a` / `--group-b` labels; optional analysis parameters & Scaffold a ratio-analysis Jupyter notebook (import → QC → merge → pool normalization → absolute quant → differential expression → enrichment) & Pre-filled `.ipynb` notebook (default `ratio\_analysis.ipynb`) \\
+CLI & kardemumma-docs & Installed `kardemumma` source tree & Parse public API from `src/kardemumma`; render HTML function reference; optional PDF via headless Chrome & `kardemumma\_api.html`, `kardemumma\_api.pdf` \\
+Import & ImportSkylineFile & Skyline report CSV (required columns: Precursor, Replicate, File Name, Peptide Sequence, RatioLightToHeavy, Library Dot Product, …) & Validate column names and dtypes; load long-format transition table & pandas DataFrame (`skyline\_data`) \\
+Import & ImportSDRFFile & Targeted SDRF `.tsv` (`source name`, `comment[data file]`, `characteristics[...]`, `factor value[...]`) & Load sample metadata; extract qRePS lot from `comment[ProteomEdge]`; suggest QC sample names & pandas DataFrame (`sdrf\_data`); lot number string \\
+Import & MergeFiles.merge\_files & Skyline DataFrame; SDRF DataFrame; optional peptide allow-list & Left-join Skyline `File Name` to SDRF `comment[data file]`; attach plate, sample, and factor columns & Merged long-format DataFrame (`skyline\_merge`) \\
+SDRF & validate\_sdrf & SDRF `.tsv` file path & Run `parse\_sdrf validate-sdrf` (sdrf-pipelines) & `(success: bool, message: str)` \\
+SDRF & readout\_ms\_type & SDRF `.tsv` file path & Read `comment[proteomics data acquisition method]` values & List of unique MS acquisition types \\
+QC / filtering & filter\_library\_dot\_product & Skyline long DataFrame; dot-product threshold & Keep rows above library dot product cutoff; drop missing areas; pivot to heavy/light wide format & Filtered pivoted DataFrame (`skyline\_clean`) \\
+QC / filtering & summarise\_peptide\_counts / filter\_peptide\_counts & Pivoted peptide table; light/heavy count cutoffs & Count detected light/heavy replicates per peptide; apply minimum count filters & Peptide count summary; filtered peptide allow-list \\
+Normalization & calculate\_intra\_plate\_cv / calculate\_inter\_plate\_cv & Pool-sample merged DataFrame; plate column & Compute intra- and inter-plate \%CV per peptide across pool replicates & Peptide-level CV statistics; inter-plate CV ranking \\
+Normalization & get\_plate\_conversion\_factors / adjust\_ratio\_by\_plate & Pool peptides; plate labels; merged ratio table & Select low-CV normalization peptides; estimate per-plate conversion factors; adjust `RatioLightToHeavy` & Conversion factor dict; batch-corrected DataFrame (`skyline\_merge\_adj`) \\
+Absolute quant & fetch\_qreps\_table / fetch\_fasta & ProteomEdge lot number or lot URL (from SDRF `comment[ProteomEdge]`) & Download qRePS spike-in table and target FASTA from ProteomEdge & qRePS DataFrame (`qRePS`, `Amount per well [pmol]`, …); FASTA DataFrame (`id`, `sequence`) \\
+Absolute quant & get\_absolute\_conc & qRePS table; batch-corrected Skyline merge (`RatioLightToHeavy`, `Protein Name`, `File Name`) & Match qRePS IDs; multiply ratio × spike amount; pivot to wide concentration matrix & Wide DataFrame indexed by qRePS / peptide / protein; columns = sample files; values = `Protein conc [pmol]` \\
+Downstream & DownStream & Wide `abs\_df`; SDRF table; two group labels (`group\_a`, `group\_b`) & Melt concentrations; merge SDRF metadata; Welch's t-test per peptide/protein; Benjamini–Hochberg adjustment; volcano plot & Differential expression results (`log2fc`, `p\_value`, `padj`); optional volcano figure \\
+Downstream & enrichment\_analysis & Hit ID list; pathway gene-set dictionary; background ID universe & Hypergeometric (Fisher's exact) enrichment test & Enrichment table (`pathway`, `overlap`, `p\_value`, `padj`) \\
+Batch correction & permanova\_batch\_effects / correct\_ratio\_by\_factors / correct\_ratio\_by\_irt & Merged ratio table; batch/plate factor columns; optional iRT offsets & PERMANOVA batch testing; median-based factor correction; iRT retention-time correction & Batch-effect statistics; corrected ratio DataFrame \\
+OpenSWATH & import\_openswath\_file / get\_ratio & OpenSWATH TSV export & Import transition report; filter best peak groups; compute light/heavy ratios & Ratio table compatible with downstream QC modules \\
+Visualization & plot\_* / map\_peptide\_sequence & QC tables, pool data, or wide `abs\_df`; SDRF metadata for grouping & Library dot-product distributions; pool boxplots; CV KDE; peptide concentration by group; protein sequence maps; PCA/UMAP & matplotlib/seaborn figures (displayed or saved as PDF) \\
+\bottomrule
+\end{tabular}
+\end{table}
