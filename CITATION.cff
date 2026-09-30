@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use kardemumma, please cite it as below."
+type: software
+title: "kardemumma: Key Analysis of Reproducible Data for Efficient Monitoring in Unified Mass Spectrometry Methods and Assays"
+version: 1.0.0
+date-released: 2026-09-21
+license: MIT
+repository-code: "https://github.com/thanadol-git/kardemumma"
+url: "https://github.com/thanadol-git/kardemumma"
+doi: 10.5281/zenodo.22882804
+keywords:
+  - proteomics
+  - mass spectrometry
+  - PRM
+  - quality control
+  - batch correction
+authors:
+  - family-names: Sutantiwanichkul
+    given-names: Thanadol
+    email: thanadol@kth.se
+  - family-names: Zheng
+    given-names: Yuqi
+  - family-names: "Tran Minh"
+    given-names: "Khue Hua"
+  - family-names: "Iglesias Mareque"
+    given-names: Maria-Jesus
+  - family-names: Edfors
+    given-names: Fredrik
