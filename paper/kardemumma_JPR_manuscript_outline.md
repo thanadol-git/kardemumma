@@ -56,12 +56,12 @@ Left: Skyline/OpenSWATH export + targeted-SDRF + qRePS lot number → centre: th
 
 ## 5. Introduction (~900 words, 4 paragraphs)
 
-| ¶ | Topic | Tentative content | ~Words |
-|---|---|---|---:|
-| 1 | Why targeted plasma proteomics | PRM/SRM with stable-isotope-labeled (SIL) standards as the bridge from discovery to clinical assays; precision, multiplexing, absolute quantification; growth of large cohort studies processed in 96-well plates. | 200 |
-| 2 | The gap after peak integration | Skyline (and OpenSWATH) do integration well, but downstream steps (transition/peptide QC, plate/batch effects, pool-based normalization, conversion to absolute concentrations) are lab-specific scripts → poor reproducibility, hard to audit for clinical translation. Metadata usually lives in spreadsheets not linked to raw files. | 250 |
-| 3 | Existing tools and their limits | Briefly compare (full comparison in Table 2): Skyline/Panorama & AutoQC (instrument/system suitability QC), MSstats / MSstatsQC (statistical modeling, longitudinal QC), TargetedMSQC, community QC standards (mzQC, pmultiqc), SDRF-Proteomics (mostly DDA/DIA-oriented). None connects SDRF metadata, plate-aware QC, and vendor-lot-driven absolute quantification in one reproducible workflow. **[verify each tool's current scope before citing]** | 250 |
-| 4 | This work | Introduce KARDEMUMMA: name/acronym, version, language, license; core contributions as 3–4 bullets-in-prose (targeted-SDRF integration, three-step CLI with cutoff guidance, ANOVA-based plate correction, automated qRePS absolute quantification, notebook report generation); developed and used at KTH/SciLifeLab; summary of demonstration datasets. | 200 |
+| ¶ | Topic | Tentative content | ~Words | Status |
+|---|---|---|---:|:---:|
+| 1 | Why targeted plasma proteomics | PRM/SRM with stable-isotope-labeled (SIL) standards as the bridge from discovery to clinical assays; precision, multiplexing, absolute quantification; growth of large cohort studies processed in 96-well plates. | 200 | ✅ |
+| 2 | The gap after peak integration | Skyline (and OpenSWATH) do integration well, but downstream steps (transition/peptide QC, plate/batch effects, pool-based normalization, conversion to absolute concentrations) are lab-specific scripts → poor reproducibility, hard to audit for clinical translation. Metadata usually lives in spreadsheets not linked to raw files. | 250 | ✅ |
+| 3 | Existing tools and their limits | Briefly compare (full comparison in Table 2): Skyline/Panorama & AutoQC (instrument/system suitability QC), MSstats / MSstatsQC (statistical modeling, longitudinal QC), TargetedMSQC, community QC standards (mzQC, pmultiqc), SDRF-Proteomics (mostly DDA/DIA-oriented). None connects SDRF metadata, plate-aware QC, and vendor-lot-driven absolute quantification in one reproducible workflow. **[verify each tool's current scope before citing]** | 250 | ✅ |
+| 4 | This work | Introduce KARDEMUMMA: name/acronym, version, language, license; core contributions as 3–4 bullets-in-prose (targeted-SDRF integration, three-step CLI with cutoff guidance, ANOVA-based plate correction, automated qRePS absolute quantification, notebook report generation); developed and used at KTH/SciLifeLab; summary of demonstration datasets. | 200 |   |
 
 ---
 
@@ -93,7 +93,8 @@ Write in full sentences (JPR forbids bullet format here).
 | 7.5 Step 3 — `report`: absolute quantification | Automatic qRePS retrieval by lot; concentrations per protein/peptide; agreement between peptides of the same protein; comparison with reference/vendor values or literature plasma concentrations (e.g., HPPP/published ranges). | **Figure 4**: concentration dynamic range plot + peptide-concordance scatter. | 500 |
 | 7.6 Application to cohort data | Short biological use case (e.g., group comparison via `kardemumma-ipynb --group-a/--group-b`) showing the tool delivers interpretable results; keep biology brief — the tool is the focus. Mention OpenSWATH/other-export input to show generality. | **Figure 5**: group comparison / per-peptide concentration by group. | 500 |
 | 7.7 Comparison with existing tools and performance | Feature matrix vs other tools; runtime and scalability from benchmark notebook; reproducibility (same input → identical output across versions). | **Table 2**: feature comparison. Figure S2: runtime scaling. | 450 |
-| 7.8 Limitations and roadmap | Currently tied to Skyline column schema and qRePS vendor standards; web scraping dependency; SRM module in development; LOD/LOQ not yet estimated; no GUI yet. Roadmap: mzQC export, pmultiqc integration, SRM, Nextflow pipeline/nf-core. Community contributions welcome. | — | 450 |
+| 7.8 Biological results: demonstration of discovery potential | Example case: application of KARDEMUMMA on a multi-plate plasma cohort revealed differential expression of clinically relevant proteins. Summarize main biological findings (e.g., identification of established and novel plasma biomarkers, concordance with previous literature, power to distinguish group phenotypes via volcano plot and dimensionality reduction). Describe improved quantification precision and batch correction enabling detection of subtle group differences. Note reproducibility and traceability of quantitative results via metadata linkage. | Figure 6 (e.g., volcano plot, t-SNE/UMAP sample separation, boxplots of key proteins) | 450 |
+| 7.9 Limitations and roadmap | Currently tied to Skyline column schema and qRePS vendor standards; web scraping dependency; SRM module in development; LOD/LOQ not yet estimated; no GUI yet. Roadmap: mzQC export, pmultiqc integration, SRM, Nextflow pipeline/nf-core. Community contributions welcome. | — | 450 |
 
 ## 8. Conclusions (~250 words)
 
@@ -116,12 +117,12 @@ Interpretation, not a recap: what KARDEMUMMA changes for labs running targeted p
 ## 10. Pre-submission checklist (gaps found in the repo)
 
 **Required or strongly expected by the call**
-- [ ] Tag a release matching the version in the paper and archive it on Zenodo (version-specific DOI).
-- [ ] Add a `CITATION.cff` (or `codemeta.json`) to the repo.
-- [ ] Deposit raw files + Skyline documents in ProteomeXchange (PRIDE or PanoramaPublic) — required by JPR; author-hosted links are not accepted.
-- [ ] Provide small public **test data** + an end-to-end "quick start" that reviewers can run in minutes.
-- [ ] Write the LLM code-generation/validation statement.
-- [ ] Ethics approval number and consent statement for plasma samples.
+- [ ] Tag a release matching the version in the paper and archive it on Zenodo (version-specific DOI). (Thanadol)
+- [x] Add a `CITATION.cff` (or `codemeta.json`) to the repo.
+- [ ] Deposit raw files + Skyline documents in ProteomeXchange (PRIDE or PanoramaPublic) — required by JPR; author-hosted links are not accepted. (Sathya)
+- [ ] Provide small public **test data** + an end-to-end "quick start" that reviewers can run in minutes. (Thanadol)
+- [ ] Write the LLM code-generation/validation statement. (Thanadol)
+- [ ] Ethics approval number and consent statement for plasma samples. (Fredrik)
 
 **Repository clean-up reviewers will notice**
 - [ ] README installation step references `environment.yml`, but the repo contains `config.yml` — fix.
