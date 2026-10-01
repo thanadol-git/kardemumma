@@ -41,7 +41,7 @@
 | 1–2 | Problem: targeted MS (PRM/SRM) is moving toward clinical plasma studies across many plates, but QC, normalization and absolute quantification after Skyline/OpenSWATH are done with ad hoc scripts; metadata rarely standardized. | 40 |
 | 3 | We present KARDEMUMMA (version x.y.z), an open-source Python package + CLI. | 20 |
 | 4–5 | What it does: imports Skyline/OpenSWATH exports, links them to targeted-SDRF metadata, three-step pipeline (preview → cutoff → report): dot-product & heavy/light filtering, intra-/inter-plate CV, ANOVA-based plate correction with pool normalization, and absolute quantification from qRePS spike-in standards retrieved automatically by lot number. | 60 |
-| 6 | Demonstration: applied to *N* plasma samples across *P* plates (datasets …); key numbers (e.g., peptides retained, median inter-plate CV before/after, agreement with vendor software). | 45 |
+| 6 | Demonstration: applied to *N* plasma samples across *P* plates (datasets …); key numbers (e.g., peptides retained, median inter-plate CV before/after, agreement with vendor software). Biological outcomes with examples | 45 |
 | 7 | Availability: PyPI, GitHub (MIT), Zenodo DOI; reports as Jupyter notebooks. | 25 |
 
 ## 3. Keywords (≤10)
