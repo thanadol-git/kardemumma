@@ -744,7 +744,7 @@ def adjust_ratio_by_plate(
         raise KeyError(
             f"Some plate values have no conversion factor: {missing}"
         )
-    df["RatioLightToHeavy"] = df["RatioLightToHeavy"] / plate_factors.values
+    df["RatioLightToHeavy"] = df["RatioLightToHeavy"] * plate_factors.values
     return df
 
 

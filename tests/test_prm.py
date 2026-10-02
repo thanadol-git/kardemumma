@@ -10,10 +10,12 @@ import pandas as pd
 import pytest
 
 from kardemumma.prm import (
+    adjust_ratio_by_plate,
     compute_cv,
     dot_product_summary,
     filter_library_dot_product,
     flag_missing_values,
+    get_plate_conversion_factors,
     retention_time_deviation,
     summarise_peptide_counts,
     summarize_prm,
@@ -305,3 +307,77 @@ class TestSummarizePRM:
         report = summarize_prm(sample_df)
         for key in ("cv", "missing", "dot_products", "rt_deviation"):
             assert isinstance(report[key], pd.DataFrame)
+
+
+# ---------------------------------------------------------------------------
+# get_plate_conversion_factors / adjust_ratio_by_plate
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def two_plate_df() -> pd.DataFrame:
+    """One peptide on two plates. Plate A runs high, Plate B runs low.
+
+    Medians: Plate A = 2.0, Plate B = 1.0, global = 1.5.
+    """
+    return pd.DataFrame(
+        {
+            "Peptide Sequence": ["PEP"] * 6,
+            "Replicate": [1, 2, 3, 1, 2, 3],
+            "Plate": ["A", "A", "A", "B", "B", "B"],
+            "RatioLightToHeavy": [2.0, 2.1, 1.9, 1.0, 1.1, 0.9],
+        }
+    )
+
+
+class TestGetPlateConversionFactors:
+    def test_correction_factor_is_global_over_plate_median(self, two_plate_df):
+        _, conversion_factors, _ = get_plate_conversion_factors(
+            two_plate_df, col_plate="Plate"
+        )
+        # global median (1.5) / plate median -> below-global plates get a
+        # factor > 1, above-global plates get a factor < 1.
+        assert conversion_factors["A"] == pytest.approx(0.75)
+        assert conversion_factors["B"] == pytest.approx(1.5)
+
+    def test_missing_column_raises(self, two_plate_df):
+        with pytest.raises(KeyError):
+            get_plate_conversion_factors(two_plate_df, col_plate="NoSuchPlateCol")
+
+
+class TestAdjustRatioByPlate:
+    def test_centers_plate_medians_on_global_median(self, two_plate_df):
+        """Regression test: adjustment must pull plate medians *toward* the
+        global median, not amplify their spread away from it.
+
+        This pins down a real bug where adjust_ratio_by_plate divided by the
+        conversion factor instead of multiplying, which pushed Plate A's
+        median from 2.0 to 2.67 and Plate B's from 1.0 to 0.67 -- moving both
+        further from the global median of 1.5 instead of onto it.
+        """
+        _, conversion_factors, _ = get_plate_conversion_factors(
+            two_plate_df, col_plate="Plate"
+        )
+        adjusted = adjust_ratio_by_plate(
+            two_plate_df, conversion_factors, col_match="Plate"
+        )
+        medians = adjusted.groupby("Plate")["RatioLightToHeavy"].median()
+        assert medians["A"] == pytest.approx(1.5)
+        assert medians["B"] == pytest.approx(1.5)
+
+    def test_missing_conversion_factor_raises(self, two_plate_df):
+        with pytest.raises(KeyError):
+            adjust_ratio_by_plate(two_plate_df, {"A": 0.75}, col_match="Plate")
+
+    def test_ignore_nan_plates_drops_rows(self, two_plate_df):
+        df = two_plate_df.copy()
+        df.loc[0, "Plate"] = None
+        adjusted = adjust_ratio_by_plate(
+            df, {"A": 0.75, "B": 1.5}, col_match="Plate", ignore_nan_plates=True
+        )
+        assert len(adjusted) == len(df) - 1
+
+    def test_missing_column_raises(self, two_plate_df):
+        with pytest.raises(KeyError):
+            adjust_ratio_by_plate(
+                two_plate_df, {"A": 0.75, "B": 1.5}, col_match="NoSuchPlateCol"
+            )
