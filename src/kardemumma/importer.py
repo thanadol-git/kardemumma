@@ -1,8 +1,11 @@
+import logging
 import os
 import re
 from typing import Iterable, List, Optional
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ImportSkylineFile",
@@ -226,6 +229,15 @@ class ImportSkylineFile:
             .str.contains(_HEAVY_RE.pattern, case=False, regex=True)
             .map({True: "heavy", False: "light"})
         )
+        for iso_type, group in df.groupby("Isotope Label Type"):
+            if group["Library Dot Product"].notna().sum() == 0:
+                logger.warning(
+                    "All %d '%s'-labeled rows in %s have an empty "
+                    "'Library Dot Product' value. Check the Skyline export/"
+                    "report template and spectral library coverage for this "
+                    "channel.",
+                    len(group), iso_type, self.file_path,
+                )
         print(f"File {self.file_path} is valid.")
         return df
     
