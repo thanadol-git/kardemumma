@@ -703,13 +703,13 @@ def plot_plate_conversion_factors(
         dodge=True,
         showfliers=False,
     )
-    plt.title("Peptide Sequence vs Ratio Fit (by Plate)")
+    # Place the legend above the plot, horizontally; pad the title to sit above it
+    ax.legend(title=col_plate, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=plot_df[col_plate].nunique(), frameon=False)
+    ax.set_title("Peptide Sequence vs Ratio Fit (by Plate)", pad=38)
     plt.xlabel("Peptide Sequence")
     plt.ylabel("Ratio Fit")
     plt.xticks(rotation=90)
     plt.tight_layout()
-    # Place the legend at the bottom, horizontally
-    plt.legend(title=col_plate, loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=len(plot_df[col_plate].unique()), frameon=False)
     plt.show()
     return plt.gcf()
 
