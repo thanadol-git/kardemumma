@@ -51,6 +51,20 @@ You can install the dependencies and set up the environment using [Conda](https:
    pip install -e .
    ```
 
+### Container image
+
+Each change to `main` builds a new container image with kardemumma installed, `ghcr.io/thanadol-git/kardemumma` ([.github/workflows/image.yml](.github/workflows/image.yml)). Tags: `latest` (the newest `main`), `sha-<commit>` (one commit, e.g. `sha-fd812d8`) and a version number such as `1.0.1` for each release tag.
+
+```bash
+# Docker: the current folder is /work inside the container
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work ghcr.io/thanadol-git/kardemumma:latest \
+  kardemumma-preview --skyline skyline_export.csv --sdrf experiment.sdrf.tsv --output results/
+
+# Apptainer (HPC)
+apptainer exec docker://ghcr.io/thanadol-git/kardemumma:latest \
+  kardemumma-preview --skyline skyline_export.csv --sdrf experiment.sdrf.tsv --output results/
+```
+
 ## Available pipelines
 - [ ] `SDRF generation for plasma proteomics`
 - [ ] `Targeted PRM with ProteomEdge AB`
