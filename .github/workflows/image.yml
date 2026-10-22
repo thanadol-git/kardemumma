@@ -70,7 +70,7 @@ jobs:
             docker run --rm "$tag" "$cmd" --help > /dev/null || { echo "::error::$cmd --help failed"; exit 1; }
             echo "ok: $cmd --help"
           done
-          # As under Apptainer or docker run -u: another user, nothing writable but /tmp
+          # As under docker run -u: another user, HOME=/, nothing writable but /tmp
           docker run --rm --read-only --tmpfs /tmp -u 1000:1000 "$tag" \
             python -c "import kardemumma, umap, matplotlib.pyplot"
           echo "ok: import as a non-root user on a read-only file system"
