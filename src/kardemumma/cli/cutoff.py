@@ -16,21 +16,31 @@ def main():
         prog="kardemumma-cutoff",
         description=(
             "Step 2: Apply QC filters, compute pool CV, select normalization peptides, "
-            "and batch-correct ratios. Reads the Skyline CSV + SDRF directly."
+            "and batch-correct ratios. Reads the Skyline CSV or teapot results + SDRF "
+            "directly."
         ),
     )
-    parser.add_argument("--skyline", required=True, metavar="CSV",
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--skyline", metavar="CSV",
                         help="Skyline CSV export file")
+    source.add_argument("--teapot", metavar="PATH",
+                        help="teapot's --outdir, or its peptide.abs_quant.confident.tsv. "
+                             "A run's sample_id is its SDRF data file without the extension")
+    parser.add_argument("--route", metavar="ROUTE",
+                        help="teapot route (e.g. enc_dia), when the outdir holds more than one")
     parser.add_argument("--sdrf", required=True, metavar="TSV",
                         help="SDRF .tsv file")
     parser.add_argument("--output", required=True, metavar="DIR",
                         help="Directory to write results into")
     parser.add_argument("--dotp", type=float, default=0.6, metavar="THRESHOLD",
-                        help="Library dot product threshold (default: 0.6)")
+                        help="Skyline: library dot product threshold (default: 0.6). "
+                             "teapot: every confident pair counts, in both channels.")
     parser.add_argument("--light-cutoff", type=int, default=600, metavar="N",
-                        help="Min light sample count per peptide (default: 600)")
+                        help="Min light sample count per peptide (default: 600; "
+                             "teapot: runs with a confident pair)")
     parser.add_argument("--heavy-cutoff", type=int, default=600, metavar="N",
-                        help="Min heavy sample count per peptide (default: 600)")
+                        help="Min heavy sample count per peptide (default: 600; "
+                             "teapot: runs with a confident pair)")
     parser.add_argument("--pool-value", default="PlasmaPool", metavar="STR",
                         help="Value in characteristics[Sample] that marks pool samples "
                              "(default: PlasmaPool)")
@@ -57,18 +67,26 @@ def main():
     print("=== kardemumma-cutoff ===")
 
     # --- Import ---
-    skyline_importer = kdm.ImportSkylineFile(args.skyline)
-    skyline_data = skyline_importer.import_skyline_file()
-
     sdrf_obj = kdm.ImportSDRFFile(args.sdrf)
     sdrf_data = sdrf_obj.import_sdrf_file()
 
-    # --- Remove QC samples (by File Name) ---
-    qc_samples = skyline_importer.suggest_qc_samples(skyline_data)
+    if args.teapot:
+        skyline_importer = kdm.ImportTeapotFile(args.teapot, route=args.route)
+        skyline_data = skyline_importer.import_teapot_file(sdrf_df=sdrf_data)
+    else:
+        skyline_importer = kdm.ImportSkylineFile(args.skyline)
+        skyline_data = skyline_importer.import_skyline_file()
+
+    # --- Remove QC samples (by File Name); teapot's runs are the SDRF's ---
+    qc_samples = [] if args.teapot else skyline_importer.suggest_qc_samples(skyline_data)
     skyline_data = kdm.remove_qc_samples(skyline_data, qc_samples)
 
-    # --- Library dot product filter (also pivots to heavy/light wide format) ---
-    skyline_clean = kdm.filter_library_dot_product(skyline_data, threshold=args.dotp)
+    # --- Library dot product filter (also pivots to heavy/light wide format);
+    #     teapot reports no dot product: its confident pairs count, in both channels ---
+    if args.teapot:
+        skyline_clean = kdm.pivot_confident_pairs(skyline_data)
+    else:
+        skyline_clean = kdm.filter_library_dot_product(skyline_data, threshold=args.dotp)
 
     # --- Peptide detection summary (on pivoted data) ---
     peptide_counts = kdm.summarise_peptide_counts(skyline_clean)
@@ -78,6 +96,13 @@ def main():
     filtered_peptide_counts = kdm.filter_peptide_counts(
         peptide_counts, light_cutoff=args.light_cutoff, heavy_cutoff=args.heavy_cutoff
     )
+    if filtered_peptide_counts.empty:
+        print(f"Error: no peptide counts in more than {args.light_cutoff} runs (light) and "
+              f"{args.heavy_cutoff} runs (heavy); the most any peptide counts in is "
+              f"{peptide_counts['light_count'].max()} and {peptide_counts['heavy_count'].max()}. "
+              "Choose --light-cutoff and --heavy-cutoff from kardemumma-preview's "
+              "heavy_light_scatter.pdf.", file=sys.stderr)
+        sys.exit(1)
     selected_report, selected_peptides = kdm.report_peptide_protein_summary(filtered_peptide_counts)
 
     # --- Merge with SDRF (uses raw long-format skyline_data, filtered to selected_peptides) ---
@@ -165,7 +190,9 @@ def main():
     pd.Series(list(selected_norm_peptides), name="Peptide Sequence").to_csv(
         out / "norm_peptides.csv", index=False
     )
-    skyline_merge.to_csv(out / "skyline_merge.csv", index=False)
+    # named after the source: skyline_merge*.csv or teapot_merge*.csv
+    prefix = "teapot" if args.teapot else "skyline"
+    skyline_merge.to_csv(out / f"{prefix}_merge.csv", index=False)
     skyline_pool.to_csv(out / "pool_data.csv", index=False)
     peptide_plate_stats.to_csv(out / "peptide_plate_stats.csv", index=False)
     interplate_cv.to_csv(out / "interplate_cv.csv", index=False)
@@ -173,13 +200,17 @@ def main():
     pd.DataFrame(
         list(conversion_factors.items()), columns=["plate", "conversion_factor"]
     ).to_csv(out / "conversion_factors.csv", index=False)
-    skyline_merge_adj.to_csv(out / "skyline_merge_adj.csv", index=False)
+    skyline_merge_adj.to_csv(out / f"{prefix}_merge_adj.csv", index=False)
 
     # Save parameters for reproducibility
+    if args.teapot:
+        source_params = {"teapot": str(skyline_importer.file_path.resolve()),
+                         "teapot_route": skyline_importer.route}
+    else:
+        source_params = {"skyline": str(Path(args.skyline).resolve()), "dotp_threshold": args.dotp}
     params = {
-        "skyline": str(Path(args.skyline).resolve()),
+        **source_params,
         "sdrf": str(Path(args.sdrf).resolve()),
-        "dotp_threshold": args.dotp,
         "light_cutoff": args.light_cutoff,
         "heavy_cutoff": args.heavy_cutoff,
         "pool_value": args.pool_value,
@@ -193,8 +224,8 @@ def main():
 
     print(f"\nCutoff results → {out}")
     print("  Tables : peptide_counts.csv, filtered_peptide_counts.csv,")
-    print("           skyline_merge.csv, pool_data.csv, peptide_plate_stats.csv,")
-    print("           interplate_cv.csv, conversion_factors.csv, skyline_merge_adj.csv")
+    print(f"           {prefix}_merge.csv, pool_data.csv, peptide_plate_stats.csv,")
+    print(f"           interplate_cv.csv, conversion_factors.csv, {prefix}_merge_adj.csv")
     print("  Plots  : pool_boxplot.pdf, intra_plate_cv.pdf, inter_plate_cv_kde.pdf,")
     print("           cumulative_cv.pdf, norm_peptides_boxplot.pdf, plate_conversion_factors.pdf")
     print("  Config : cutoff_params.json")

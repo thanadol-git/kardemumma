@@ -15,15 +15,20 @@ def main():
         prog="kardemumma-report",
         description=(
             "Step 3: Fetch qRePS data, calculate absolute protein concentrations, "
-            "and generate all report plots. Reads skyline_merge_adj.csv written by "
-            "kardemumma-cutoff."
+            "and generate all report plots. Reads skyline_merge_adj.csv (or "
+            "teapot_merge_adj.csv) written by kardemumma-cutoff. teapot results carry the "
+            "known heavy amounts teapot quantified with; those are used in place of the "
+            "qRePS table."
         ),
     )
     parser.add_argument("--output", required=True, metavar="DIR",
-                        help="Output directory (must contain skyline_merge_adj.csv "
-                             "from kardemumma-cutoff)")
+                        help="Output directory (must contain skyline_merge_adj.csv or "
+                             "teapot_merge_adj.csv from kardemumma-cutoff)")
     parser.add_argument("--sdrf", required=True, metavar="TSV",
                         help="SDRF .tsv file (provides sample metadata and qRePS lot number)")
+    parser.add_argument("--group-col", default=None, metavar="COL",
+                        help="SDRF column to group samples by on the x-axis of the "
+                             "concentration plots (default: as --color-col)")
     parser.add_argument("--color-col", default=None, metavar="COL",
                         help="SDRF column to color concentration plots by "
                              "(default: last 'factor value[...]' column)")
@@ -32,7 +37,8 @@ def main():
     import kardemumma as kdm
 
     out = Path(args.output)
-    adj_path = out / "skyline_merge_adj.csv"
+    teapot = (out / "teapot_merge_adj.csv").exists()
+    adj_path = out / ("teapot_merge_adj.csv" if teapot else "skyline_merge_adj.csv")
     if not adj_path.exists():
         print(f"Error: {adj_path} not found. Run kardemumma-cutoff first.", file=sys.stderr)
         sys.exit(1)
@@ -44,29 +50,36 @@ def main():
     sdrf_obj = kdm.ImportSDRFFile(args.sdrf)
     sdrf_data = sdrf_obj.import_sdrf_file()
 
-    # --- Fetch qRePS data from ProteomEdge (no authentication required) ---
+    # --- Fetch qRePS data from ProteomEdge (no authentication required);
+    #     teapot results carry the known heavy amounts teapot quantified with ---
     qreps_lot = sdrf_obj.extract_qreps_lot_number()
-    print(f"Fetching qRePS table for lot {qreps_lot} ...")
-    qreps_table = kdm.fetch_qreps_table(qreps_lot)
+    if not teapot:
+        print(f"Fetching qRePS table for lot {qreps_lot} ...")
+        qreps_table = kdm.fetch_qreps_table(qreps_lot)
     print(f"Fetching FASTA for lot {qreps_lot} ...")
     fasta_df = kdm.fetch_fasta(qreps_lot)
 
     # --- Absolute quantification ---
     print("Calculating absolute concentrations ...")
-    abs_df = kdm.get_absolute_conc(qreps_table, skyline_merge_adj)
+    if teapot:
+        abs_df = kdm.get_absolute_conc(None, skyline_merge_adj, amount_col="Heavy Amount [pmol]")
+    else:
+        abs_df = kdm.get_absolute_conc(qreps_table, skyline_merge_adj)
 
     # --- Save tables ---
-    qreps_table.to_csv(out / "qreps_table.csv", index=False)
+    if not teapot:
+        qreps_table.to_csv(out / "qreps_table.csv", index=False)
     fasta_df.to_csv(out / "fasta.csv", index=False)
     abs_df.reset_index().to_csv(out / "abs_df.csv", index=False)
-    print("  Saved: qreps_table.csv, fasta.csv, abs_df.csv")
+    print("  Saved: " + ("" if teapot else "qreps_table.csv, ") + "fasta.csv, abs_df.csv")
 
     # --- Per-protein concentration plots (boxplot + strip + median line) ---
     print("Generating protein concentration PDF ...")
     kdm.plot_all_all(
         abs_df,
         sdrf_data,
-        color_col=args.color_col,
+        group_col=args.group_col,
+        color_col=args.color_col or args.group_col,
         pdf_path=str(out / "protein_concentrations.pdf"),
     )
 
@@ -75,7 +88,7 @@ def main():
     kdm.plot_all_median_peptide_concentration_by_group(
         abs_df,
         sdrf_data,
-        group_col=args.color_col,
+        group_col=args.group_col or args.color_col,
         pdf_path=str(out / "protein_median_concentrations.pdf"),
     )
 
@@ -100,6 +113,6 @@ def main():
         plt.close("all")
 
     print(f"\nReport complete → {out}")
-    print("  Tables : qreps_table.csv, fasta.csv, abs_df.csv")
+    print("  Tables : " + ("" if teapot else "qreps_table.csv, ") + "fasta.csv, abs_df.csv")
     print("  Plots  : protein_concentrations.pdf, protein_median_concentrations.pdf,")
     print("           pca.pdf, umap.pdf")

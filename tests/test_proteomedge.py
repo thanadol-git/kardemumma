@@ -167,45 +167,45 @@ class TestGetWithRetry:
 # ---------------------------------------------------------------------------
 
 class TestFetchQrepsTable:
-    HTML_WITH_TABLE = """
-    <table>
-    <tr><th>Protein</th><th>qReps</th><th>Amount per well [pmol]</th></tr>
-    <tr><td>ProtA</td><td>Q1</td><td>1.2</td></tr>
-    </table>
-    """
+    CSV = (
+        "qRePS,Gene,Protein,Uniprot,Amount per well [pmol]\n"
+        "QR3140513,A1BG,Alpha-1B-glycoprotein,P04217,1.327\n"
+    )
+    URL = "https://data.proteomedge.com/download/24001/24001_qreps.csv"
 
-    def test_finds_and_returns_matching_table(self):
-        response = MagicMock(text=self.HTML_WITH_TABLE)
+    def test_reads_the_csv(self):
+        response = MagicMock(text=self.CSV)
         with patch("kardemumma.proteomedge._get_with_retry", return_value=response):
-            df = fetch_qreps_table("23002")
-        assert list(df.columns) == ["Protein", "qReps", "Amount per well [pmol]"]
-        assert df.loc[0, "Protein"] == "ProtA"
+            df = fetch_qreps_table("24001")
+        assert list(df.columns) == ["qRePS", "Gene", "Protein", "Uniprot", "Amount per well [pmol]"]
+        assert df.loc[0, "Amount per well [pmol]"] == pytest.approx(1.327)
 
     def test_builds_url_from_plain_lot_number(self):
-        response = MagicMock(text=self.HTML_WITH_TABLE)
+        response = MagicMock(text=self.CSV)
         with patch(
             "kardemumma.proteomedge._get_with_retry", return_value=response
         ) as mock_get:
-            fetch_qreps_table("23002")
-        mock_get.assert_called_once_with(
-            "https://proteomedge.com/lotdata/23002/", timeout=30
-        )
+            fetch_qreps_table(24001)
+        mock_get.assert_called_once_with(self.URL, timeout=30)
 
-    def test_uses_full_url_as_is(self):
-        response = MagicMock(text=self.HTML_WITH_TABLE)
-        url = "https://proteomedge.com/lotdata/23002/"
+    def test_takes_the_lot_from_a_lot_url(self):
+        response = MagicMock(text=self.CSV)
         with patch(
             "kardemumma.proteomedge._get_with_retry", return_value=response
         ) as mock_get:
-            fetch_qreps_table(url)
-        mock_get.assert_called_once_with(url, timeout=30)
+            fetch_qreps_table("https://proteomedge.com/lotdata/24001/")
+        mock_get.assert_called_once_with(self.URL, timeout=30)
 
-    def test_raises_when_no_matching_table(self):
-        html = "<table><tr><th>Foo</th></tr><tr><td>1</td></tr></table>"
-        response = MagicMock(text=html)
+    def test_raises_when_the_download_fails(self):
+        with patch("kardemumma.proteomedge._get_with_retry", side_effect=requests.HTTPError("404")):
+            with pytest.raises(ValueError, match="Could not retrieve qRePS CSV"):
+                fetch_qreps_table("24001")
+
+    def test_raises_on_an_empty_table(self):
+        response = MagicMock(text="qRePS,Amount per well [pmol]\n")
         with patch("kardemumma.proteomedge._get_with_retry", return_value=response):
-            with pytest.raises(ValueError, match="Could not find qRePS data table"):
-                fetch_qreps_table("23002")
+            with pytest.raises(ValueError, match="empty"):
+                fetch_qreps_table("24001")
 
 
 # ---------------------------------------------------------------------------

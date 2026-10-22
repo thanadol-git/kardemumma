@@ -3,7 +3,7 @@ KARDEMUMMA — Key Analysis of Reproducible Data for Efficient Monitoring
 in Unified Mass Spectrometry Methods and Assays.
 
 Python package for processing and quality-checking targeted mass spectrometry
-outputs (Skyline / OpenSWATH-style exports).
+outputs (Skyline / OpenSWATH-style exports, and teapot absolute quantification).
 """
 
 from .client import SkylineClient
@@ -14,6 +14,11 @@ from .importer import (
     get_irt_peptides,
     normalize_data_filename,
     remove_qc_samples,
+)
+from .teapot import (
+    ImportTeapotFile,
+    find_teapot_confident_table,
+    pivot_confident_pairs,
 )
 from .sdrf import (
     validate_sdrf,
@@ -117,6 +122,10 @@ __all__ = [
     "get_irt_peptides",
     "normalize_data_filename",
     "remove_qc_samples",
+    # teapot
+    "ImportTeapotFile",
+    "find_teapot_confident_table",
+    "pivot_confident_pairs",
     # SDRF
     "validate_sdrf",
     "readout_ms_type",

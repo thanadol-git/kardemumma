@@ -5,7 +5,11 @@ Run with:  pytest tests/test_prm.py -v
 """
 
 import math
+from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -15,7 +19,9 @@ from kardemumma.prm import (
     dot_product_summary,
     filter_library_dot_product,
     flag_missing_values,
+    get_absolute_conc,
     get_plate_conversion_factors,
+    plot_all_all,
     retention_time_deviation,
     summarise_peptide_counts,
     summarize_prm,
@@ -381,3 +387,153 @@ class TestAdjustRatioByPlate:
             adjust_ratio_by_plate(
                 two_plate_df, {"A": 0.75, "B": 1.5}, col_match="NoSuchPlateCol"
             )
+
+
+# ---------------------------------------------------------------------------
+# Plate normalization
+# ---------------------------------------------------------------------------
+
+PLATE = "characteristics[plate]"
+
+
+def _pools(plate_level, missing=(), runs_per_plate=3):
+    """Pool rows: each peptide's ratio is its own level times its plate's."""
+    peptides = {"PEPA": 0.5, "PEPB": 2.0, "PEPC": 8.0}
+    rows = []
+    for plate, level in plate_level.items():
+        for r in range(runs_per_plate):
+            run = f"{plate}_R{r}"
+            for pep, base in peptides.items():
+                if (plate, pep) not in missing:
+                    rows.append({"Replicate": run, "File Name": f"{run}.raw", PLATE: plate,
+                                 "Peptide Sequence": pep, "RatioLightToHeavy": base * level})
+    return pd.DataFrame(rows)
+
+
+def _spread_after(pools, factors):
+    """Largest max/min ratio of a peptide across runs after correction (1 = plates agree)."""
+    adjusted = adjust_ratio_by_plate(pools, factors, col_match=PLATE)
+    per_peptide = adjusted.groupby("Peptide Sequence")["RatioLightToHeavy"]
+    return (per_peptide.max() / per_peptide.min()).max()
+
+
+class TestPlateConversionFactors:
+    @pytest.mark.parametrize("log_transform", [True, False])
+    def test_plate_reading_high_is_lowered(self, log_transform):
+        pools = _pools({"P1": 1.0, "P2": 1.0, "P3": 1.5})
+        table, factors, _ = get_plate_conversion_factors(pools, col_plate=PLATE, log_transform=log_transform)
+        assert factors["P1"] == pytest.approx(1.0)
+        assert factors["P3"] == pytest.approx(1 / 1.5)
+        assert table.set_index(PLATE).loc["P3", "plate_median"] == pytest.approx(1.5)
+        assert _spread_after(pools, factors) == pytest.approx(1.0)
+
+    @pytest.mark.parametrize("log_transform", [True, False])
+    def test_plates_end_up_level(self, log_transform):
+        pools = _pools({"P1": 1.0, "P2": 2.0})
+        _, factors, _ = get_plate_conversion_factors(pools, col_plate=PLATE, log_transform=log_transform)
+        assert factors["P1"] > 1 > factors["P2"]
+        assert _spread_after(pools, factors) == pytest.approx(1.0)
+
+    def test_peptides_missing_from_a_plate_do_not_shift_it(self):
+        # P2 lacks the high-ratio peptide; the peptides it has read as on P1
+        pools = _pools({"P1": 1.0, "P2": 1.0}, missing={("P2", "PEPC")})
+        _, factors, _ = get_plate_conversion_factors(pools, col_plate=PLATE, log_transform=True)
+        assert factors["P2"] == pytest.approx(1.0)
+
+    def test_non_positive_and_missing_ratios_are_left_out(self):
+        pools = _pools({"P1": 1.0, "P2": 2.0})
+        bad = pools.head(2).assign(RatioLightToHeavy=[0.0, float("nan")])
+        _, factors, _ = get_plate_conversion_factors(pd.concat([pools, bad]), col_plate=PLATE,
+                                                     log_transform=True)
+        assert np.isfinite(list(factors.values())).all()
+        assert _spread_after(pools, factors) == pytest.approx(1.0)
+
+
+class TestAdjustRatioByPlateDefaults:
+    def test_multiplies_by_the_factor(self):
+        df = pd.DataFrame({PLATE: ["P1", "P2"], "RatioLightToHeavy": [1.0, 3.0]})
+        out = adjust_ratio_by_plate(df, {"P1": 2.0, "P2": 0.5})
+        assert out["RatioLightToHeavy"].tolist() == [2.0, 1.5]
+
+    def test_rows_without_a_plate_are_left_out(self):
+        df = pd.DataFrame({"Replicate": ["R1", "R2"], PLATE: ["P1", None],
+                           "RatioLightToHeavy": [1.0, 3.0]})
+        out = adjust_ratio_by_plate(df, {"P1": 2.0})
+        assert out["Replicate"].tolist() == ["R1"]
+
+    def test_plate_without_a_factor_raises(self):
+        df = pd.DataFrame({PLATE: ["P1", "P9"], "RatioLightToHeavy": [1.0, 3.0]})
+        with pytest.raises(KeyError, match="P9"):
+            adjust_ratio_by_plate(df, {"P1": 2.0})
+
+
+# ---------------------------------------------------------------------------
+# Absolute concentrations
+# ---------------------------------------------------------------------------
+
+class TestGetAbsoluteConc:
+    KEY_A = ("QR0000001", "PEPAK", "QR0000001_ABC|P11111")
+    KEY_B = ("QR0000002", "PEPBR", "QR0000002_DEF|P22222")
+
+    @pytest.fixture()
+    def light_rows(self):
+        return pd.DataFrame({
+            "Protein Name": [self.KEY_A[2]] * 3 + [self.KEY_B[2]],
+            "Peptide Sequence": ["PEPAK", "PEPAK", "PEPAK", "PEPBR"],
+            "Precursor Charge": [2, 3, 2, 2],
+            "File Name": ["f1.raw", "f1.raw", "f2.raw", "f1.raw"],
+            "RatioLightToHeavy": [0.0123, 0.0125, 2.0, 1.0],
+            "Heavy Amount [pmol]": [0.0123, 0.0123, 0.0123, 0.5],
+        })
+
+    def test_charge_states_are_averaged_and_not_rounded(self, light_rows):
+        qreps = pd.DataFrame({"qRePS": ["QR0000001", "QR0000002"], "Amount per well [pmol]": [0.0123, 0.5]})
+        wide = get_absolute_conc(qreps, light_rows)
+        assert wide.loc[self.KEY_A, "f1.raw"] == pytest.approx(0.0124 * 0.0123, rel=1e-9)
+        assert wide.loc[self.KEY_B, "f1.raw"] == pytest.approx(0.5)
+
+    def test_amount_of_each_row(self, light_rows):
+        wide = get_absolute_conc(None, light_rows, amount_col="Heavy Amount [pmol]")
+        assert wide.loc[self.KEY_A, "f2.raw"] == pytest.approx(2.0 * 0.0123)
+        assert wide.loc[self.KEY_B, "f1.raw"] == pytest.approx(0.5)
+
+    def test_amount_of_each_row_needs_no_qreps_id(self, light_rows):
+        rows = light_rows.assign(**{"Protein Name": light_rows["Protein Name"].str.replace("QR", "XX")})
+        wide = get_absolute_conc(None, rows, amount_col="Heavy Amount [pmol]")
+        assert wide.loc[("XX0000002_DEF|P22222", "PEPBR", "XX0000002_DEF|P22222"), "f1.raw"] == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# Report plots
+# ---------------------------------------------------------------------------
+
+class TestPlotAllAll:
+    @pytest.fixture()
+    def abs_df(self):
+        index = pd.MultiIndex.from_tuples(
+            [("QR0000001", "PEPAK", "QR0000001_ABC|P11111"),
+             ("QR0000002", "PEPBR", "QR0000002_DEF|P22222")],
+            names=["qRePS", "Peptide Sequence", "Protein Name"],
+        )
+        # the second protein has values in group B only
+        return pd.DataFrame({"a1.raw": [1.0, np.nan], "a2.raw": [1.2, np.nan],
+                             "b1.raw": [2.0, 3.0], "b2.raw": [2.2, 3.3]},
+                            index=index).rename_axis(columns="File Name")
+
+    @pytest.fixture()
+    def sdrf(self):
+        return pd.DataFrame({
+            "source name": ["a1", "a2", "b1", "b2"],
+            "comment[data file]": ["a1.raw", "a2.raw", "b1.raw", "b2.raw"],
+            "characteristics[plate]": ["P1", "P2", "P1", "P2"],
+            "factor value[group]": ["A", "A", "B", "B"],
+        })
+
+    def test_colour_defaults_to_the_group_column(self, abs_df, sdrf, tmp_path, capsys):
+        pdf = plot_all_all(abs_df, sdrf, pdf_path=str(tmp_path / "all.pdf"))
+        assert Path(pdf).stat().st_size > 0
+        assert "Saved 2 plots" in capsys.readouterr().out
+
+    def test_other_colour_column(self, abs_df, sdrf, tmp_path, capsys):
+        plot_all_all(abs_df, sdrf, color_col="characteristics[plate]", pdf_path=str(tmp_path / "all.pdf"))
+        assert "Saved 2 plots" in capsys.readouterr().out
