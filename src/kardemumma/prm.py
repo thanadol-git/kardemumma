@@ -642,21 +642,28 @@ def get_plate_conversion_factors(
 
     d = df[cols].drop_duplicates().copy()
     d["ratio_fit"] = pd.to_numeric(d[ratio_col], errors="coerce")
+    d = d[(d["ratio_fit"] > 0) & d[col_plate].notna()].copy()
     if log_transform:
         d["ratio_fit"] = np.log(d["ratio_fit"])
+    peptide_median = d.groupby("Peptide Sequence")["ratio_fit"].transform("median")
+    if log_transform:
+        d["relative"] = d["ratio_fit"] - peptide_median
+    else:
+        d["relative"] = d["ratio_fit"] / peptide_median
 
     model = smf.ols(
         f'ratio_fit ~ C(Q("{col_plate}")) + C(Q("Peptide Sequence"))', data=d
     ).fit()
 
     platemed = (
-        d.groupby(col_plate, dropna=True, observed=True)["ratio_fit"]
+        d.groupby(col_plate, observed=True)["relative"]
         .median()
         .reset_index()
-        .rename(columns={"ratio_fit": "plate_median"})
+        .rename(columns={"relative": "plate_median"})
     )
-    global_median = d["ratio_fit"].median()
-    platemed["correction_factor"] = global_median / platemed["plate_median"]
+    if log_transform:
+        platemed["plate_median"] = np.exp(platemed["plate_median"])
+    platemed["correction_factor"] = 1 / platemed["plate_median"]
     conversion_factors = dict(zip(platemed[col_plate].astype(str), platemed["correction_factor"]))
     
     # Print the conversion factors
@@ -744,7 +751,7 @@ def adjust_ratio_by_plate(
         raise KeyError(
             f"Some plate values have no conversion factor: {missing}"
         )
-    df["RatioLightToHeavy"] = df["RatioLightToHeavy"] / plate_factors.values
+    df["RatioLightToHeavy"] = df["RatioLightToHeavy"] * plate_factors.values
     return df
 
 
@@ -754,11 +761,12 @@ def adjust_ratio_by_plate(
 # ---------------------------------------------------------------------------
 
 def get_absolute_conc(
-    qreps_table: pd.DataFrame,
+    qreps_table: Optional[pd.DataFrame],
     skyline_df: pd.DataFrame,
     skyline_protein_col: str = 'Protein Name',
     ratio_cutoff_low: float = 10**-3,
     ratio_cutoff_high: float = 10**3,
+    amount_col: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Combine qRePS table with skyline_merge_adj, using File Name (not Replicate) as the identifier for samples/files.
@@ -767,9 +775,6 @@ def get_absolute_conc(
     # Check for necessary columns in both dataframes
     if skyline_protein_col not in skyline_df.columns:
         raise KeyError(f"Column '{skyline_protein_col}' not found in skyline_df.")
-    # Check if qRePS is in qreps_table
-    if 'qRePS' not in qreps_table.columns:
-        raise KeyError("Column 'qRePS' not found in qreps_table.")
     # Check for File Name in skyline_df
     if 'File Name' not in skyline_df.columns:
         raise KeyError("Column 'File Name' not found in skyline_df.")
@@ -778,8 +783,16 @@ def get_absolute_conc(
     skyline_df = skyline_df.copy()
     skyline_df['qRePS'] = skyline_df[skyline_protein_col].str.extract(r'(QR\d+)')
 
-    # Merge skyline_df and qreps_table on 'qRePS'
-    combined_df = pd.merge(skyline_df, qreps_table, on='qRePS', how='left')
+    if amount_col is not None:
+        # Proteins without a qRePS id keep their name as the id
+        skyline_df['qRePS'] = skyline_df['qRePS'].fillna(skyline_df[skyline_protein_col])
+        combined_df = skyline_df.assign(**{"Amount per well [pmol]": skyline_df[amount_col]})
+    else:
+        # Check if qRePS is in qreps_table
+        if 'qRePS' not in qreps_table.columns:
+            raise KeyError("Column 'qRePS' not found in qreps_table.")
+        # Merge skyline_df and qreps_table on 'qRePS'
+        combined_df = pd.merge(skyline_df, qreps_table, on='qRePS', how='left')
 
     # Check for required columns after merge
     for col in ["RatioLightToHeavy", "Amount per well [pmol]", "Peptide Sequence", "Protein Name", "File Name"]:
@@ -800,7 +813,7 @@ def get_absolute_conc(
     # Calculate absolute protein concentration [pmol]
     combined_df["Protein conc [pmol]"] = (
         combined_df["RatioLightToHeavy"] * combined_df["Amount per well [pmol]"]
-    ).round(4)
+    )
 
     # Select columns to export (replace Replicate with File Name)
     export_cols = ["qRePS", "Peptide Sequence", "Protein Name", "File Name", "Protein conc [pmol]"]
@@ -811,7 +824,7 @@ def get_absolute_conc(
         index=["qRePS", "Peptide Sequence", "Protein Name"],
         columns="File Name",
         values="Protein conc [pmol]",
-        aggfunc="first"
+        aggfunc="mean"
     )
 
     if combined_df_wide.empty:
@@ -2026,17 +2039,15 @@ def plot_all_all(
 
     group2color = _make_group2color(plot_df[color_col].dropna().unique(), color_col)
 
-    group_to_color_label = (
-        plot_df.drop_duplicates(subset=[group_col])
-        .set_index(group_col)[color_col]
-    )
+    # The colour of each group (the first row's); works when the two are one column
+    first = plot_df.drop_duplicates(subset=[group_col])
+    group_to_color_label = pd.Series(first[color_col].to_numpy(), index=first[group_col].to_numpy())
     if color_col == "characteristics[disease category]":
         cat_rank = {c: i for i, c in enumerate(_DISEASE_CATEGORY_PALETTE)}
         key_fn = lambda g: (cat_rank.get(group_to_color_label.get(g, ""), len(cat_rank)), str(g))
     else:
         key_fn = lambda g: (str(group_to_color_label.get(g, "")), str(g))
     group_order = sorted(plot_df[group_col].dropna().unique(), key=key_fn)
-    x_positions = {g: i for i, g in enumerate(group_order)}
 
     agg_all = (
         plot_df.groupby(["Protein Name", "Peptide Sequence", group_col])["Protein conc [pmol]"]
@@ -2066,6 +2077,7 @@ def plot_all_all(
                         peptides = protein_df["Peptide Sequence"].unique()
                         agg = agg_all[agg_all["Protein Name"] == pname]
                         pep_group_order = [g for g in group_order if g in protein_df[group_col].values]
+                        x_positions = {g: i for i, g in enumerate(pep_group_order)}
 
                         n_rows = len(peptides)
                         fig, axes = plt.subplots(n_rows, 1, figsize=(A4_WIDTH, max(A4_HEIGHT, 3 * n_rows)), sharex=True)
